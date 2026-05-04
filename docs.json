@@ -8,7 +8,12 @@
     "light": "#FFFFFF",
     "dark": "#FAFAFA"
   },
-  "favicon": "/favicon.svg",
+  "favicon": "/images/revtain-icon-black.png",
+  "logo": {
+    "light": "/images/revtain-icon-black.png",
+    "dark": "/images/revtain-icon-white.png",
+    "href": "/"
+  },
   "navigation": {
     "tabs": [
       {
@@ -73,8 +78,5 @@
     "socials": {
       "website": "https://revtain.com"
     }
-  },
-  "styling": {
-    "css": ["style.css"]
   }
 }
