@@ -1,0 +1,51 @@
+---
+title: "Security & Compliance"
+description: "Encryption, PCI compliance, signing, and how Revtain handles card data."
+---
+
+## Security Layers
+
+| Layer | Technology | Description |
+|-------|------------|-------------|
+| **Secrets at Rest** | AES-256-GCM | All gateway credentials encrypted before database storage |
+| **Transport** | TLS 1.2+ | All API traffic encrypted in transit |
+| **API Keys** | Cryptographic Random | 24-byte keys with `rev_` prefix (base64url encoded) |
+| **Webhook Signatures** | HMAC-SHA256 | Every outbound webhook signed with the client's `webhookSigningSecret` |
+| **Card Vault** | PCI DSS Level 1 Certified Vault | Card data is processed and stored by a certified payment vault — never on Revtain application servers |
+| **Data Isolation** | Isolated Vault Environments | Each client gets an isolated payment vault environment |
+| **Resilience** | Exponential Backoff | Outbound gateway calls retry with backoff on 5xx errors |
+| **Rate Limiting** | Per-API-Key | 60 requests/min on recovery; 10/min on tokenize |
+
+## Card Data Handling
+
+Revtain does **not** store, process, or transmit raw card numbers on its own servers.
+
+<CardGroup cols={2}>
+  <Card title="Fast Track Clients" icon="bolt">
+    Card data stays entirely within your existing payment stack. Revtain only receives gateway tokens.
+  </Card>
+  <Card title="Engine Room Clients" icon="vault">
+    Card data flows directly to a PCI DSS Level 1 certified payment vault.
+  </Card>
+</CardGroup>
+
+In both cases, Revtain only handles **opaque tokens** that cannot be reversed into card data.
+
+## API Key Security
+
+<Warning>
+  Your API key can trigger charges. Treat it like a database password.
+</Warning>
+
+- **Never** expose in client-side code, public repos, or logs
+- Store in environment variables or a secret manager (AWS Secrets Manager, Vault, etc.)
+- Rotate immediately if you suspect compromise — contact [support@revtain.com](mailto:support@revtain.com)
+- Use separate keys for different environments (dev, staging, production)
+
+## Webhook Signature Verification
+
+All outbound webhooks include an `X-Revtain-Signature` header. Always verify before processing — see the [Webhooks Guide](/guides/webhooks) for code examples.
+
+## PCI Compliance Documentation
+
+For clients requiring PCI compliance documentation, Revtain can provide our vault infrastructure partner's certification under NDA. Contact the Revtain team for details.

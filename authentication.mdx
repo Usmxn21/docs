@@ -1,0 +1,52 @@
+---
+title: "Authentication"
+description: "Authenticate every API request with your Revtain API key."
+---
+
+Pass your API key via the `X-API-KEY` header on all requests:
+
+```bash
+X-API-KEY: rev_dTviCg52T8gLPCjrrW4KA0NKf_f5pQgk
+```
+
+<Warning>
+  **Keep this secret.** Your API key can trigger charges. Never expose it in client-side code, public repos, or logs.
+</Warning>
+
+## Onboarding Credentials
+
+During onboarding, you receive two credentials:
+
+| Credential | Format | Purpose |
+|------------|--------|---------|
+| **API Key** | `rev_xxxxxxxxxxxxxxxxxxxxxxxx` | Authenticates all API requests |
+| **Webhook Signing Secret** | `whsec_xxxxxxxxxxxxxxxxxxxxxxxx` | Verifies inbound webhook signatures |
+
+<Note>
+  Both are shown **once** during onboarding. Store them in environment variables — never in client-side code or repositories.
+</Note>
+
+## What You Provide
+
+- Your **payment gateway key** (Stripe secret key, Braintree credentials, etc.)
+- A **webhook URL** (HTTPS endpoint to receive recovery notifications)
+- Optionally, up to **2 backup gateways** for multi-gateway cascade
+
+## Optional Configuration
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `billingCycleDay` | integer (1-31) | Friday payday window | Day of month customers are billed. Optimises retry timing. |
+| `timezone` | string | `UTC` | IANA timezone (e.g., `America/New_York`). |
+| `dunningEnabled` | boolean | `false` | Enable automated dunning webhook sequences on failure. |
+| `cardUpdateDomain` | string | — | Custom domain for branded card update page (e.g., `pay.yourdomain.com`). |
+
+## Rate Limits
+
+| Endpoint | Limit |
+|----------|-------|
+| `/api/recovery/execute` | 60 requests / minute / API key |
+| `/api/recovery/tokenize` | 10 requests / minute / API key |
+| All others | No specific limit (fair-use applies) |
+
+Rate-limited requests return `429 Too Many Requests` with a `retryAfter` field.

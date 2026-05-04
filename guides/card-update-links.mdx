@@ -1,0 +1,51 @@
+---
+title: "Card Update Links"
+description: "Generate secure, time-limited URLs for customers to update their payment method — branded with your business."
+---
+
+Generate a secure, time-limited URL that your customer can visit to update their payment method. The page is branded to your business — your customer sees your name, not Revtain's.
+
+## Generate a Link
+
+```bash
+curl -X POST https://api.revtain.com/api/recovery/update-card/generate \
+  -H "Content-Type: application/json" \
+  -H "X-API-KEY: rev_YOUR_API_KEY" \
+  -d '{"paymentMethodToken": "01KKZ10AD66A3VX260WKM0YFPG"}'
+```
+
+**Response (`201 Created`):**
+
+```json
+{
+  "url": "https://pay.yourdomain.com/api/recovery/update-card/abc123xyz...",
+  "token": "abc123xyz...",
+  "expiresAt": "2026-04-23T14:30:00.000Z"
+}
+```
+
+The URL is valid for **72 hours** and can only be used once. Send it to your customer via email, SMS, or in-app messaging.
+
+When the customer updates their card, you'll receive a [`card.updated`](/guides/webhooks#card-updated) webhook with the old and new payment method tokens.
+
+## Custom Domain Setup
+
+By default, the card update URL uses the Revtain API domain. For a seamless customer experience, configure a custom domain so your customers see your own URL (e.g., `pay.yourdomain.com`).
+
+<Steps>
+  <Step title="Add a CNAME DNS record">
+    `pay.yourdomain.com` → `api.revtain.com`
+  </Step>
+  <Step title="Ensure SSL is active">
+    Automatic if you use Cloudflare or similar.
+  </Step>
+  <Step title="Set cardUpdateDomain">
+    During onboarding or via the admin API: `cardUpdateDomain: "pay.yourdomain.com"`
+  </Step>
+</Steps>
+
+The hosted page displays your business name, a secure card entry form, and a confirmation message — **no third-party branding visible to your customer**.
+
+<Tip>
+  **Recommended:** Set up a custom domain before sending card update links to customers. They're more likely to trust and complete a card update on a URL they recognise.
+</Tip>

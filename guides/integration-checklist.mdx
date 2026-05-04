@@ -1,0 +1,52 @@
+---
+title: "Integration Checklist"
+description: "Everything your team needs to do before going live with Revtain."
+---
+
+## Before You Start
+
+- [ ] Receive your **API Key** (`rev_xxx`) and **Webhook Signing Secret** (`whsec_xxx`) from Revtain onboarding
+- [ ] Store both credentials securely in environment variables — never in client-side code or repositories
+- [ ] Decide your integration path: **Connector** (Chargebee/Recurly/Stripe Billing/Braintree — no code) or **API** (custom)
+
+## For Connector Integrations (No Code)
+
+- [ ] Copy the webhook URL from your credentials modal (includes your client ID)
+- [ ] Paste it into your billing platform's webhook settings
+- [ ] Select the correct event (e.g., `payment_failed` for Chargebee)
+- [ ] Trigger a test failure in your billing platform sandbox to verify the webhook arrives
+
+## For API Integrations
+
+- [ ] Set up your webhook endpoint (HTTPS, returns `200 OK`)
+- [ ] Implement webhook signature verification — see [Webhooks Guide](/guides/webhooks)
+- [ ] Handle `recovery.success` — mark the invoice as paid in your system
+- [ ] Handle `recovery.failed` — trigger your dunning flow or send customer a card update link
+- [ ] Handle `recovery.blocked` — flag the account for review, do **NOT** retry
+- [ ] Call `POST /api/recovery/execute` when a payment fails in your billing system
+- [ ] Include `originalDeclineCode` and `idempotencyKey` in every request
+- [ ] Optionally: call `POST /api/recovery/pulse` for organic successes (improves CFO report accuracy)
+
+## Testing
+
+- [ ] Onboard with a **test gateway** (Revtain Test Gateway or Stripe test key)
+- [ ] Send a recovery request with `simulateOutcome: "success"` — verify your webhook handler receives `recovery.success`
+- [ ] Send `simulateOutcome: "failed"` — verify your handler receives `recovery.failed`
+- [ ] Send `simulateOutcome: "blocked"` — verify your handler receives `recovery.blocked`
+- [ ] Test idempotency: same `idempotencyKey` twice — verify `409 Conflict`
+- [ ] Test rate limiting: 61+ requests in one minute — verify `429 Too Many Requests`
+
+## Going Live
+
+- [ ] Re-onboard with your **live gateway key** (e.g., Stripe `sk_live_xxx`)
+- [ ] Optionally: add a backup gateway for multi-gateway cascade
+- [ ] Verify your webhook endpoint is HTTPS and publicly accessible
+- [ ] Send a real failed payment and confirm end-to-end recovery
+- [ ] Confirm `recovery.success` webhook updates your billing system correctly
+
+## Optional Enhancements
+
+- [ ] Set `billingCycleDay` and `timezone` for optimised retry timing
+- [ ] Enable `dunningEnabled` for automated dunning sequences
+- [ ] Configure `cardUpdateDomain` (CNAME to `api.revtain.com`) for branded card update pages
+- [ ] Call `POST /api/predict/risk` before billing to proactively identify at-risk payments

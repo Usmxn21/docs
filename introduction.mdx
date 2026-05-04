@@ -1,0 +1,50 @@
+---
+title: "Revtain API"
+description: "Recover failed payments. No checkout changes. Works with your existing payment stack."
+---
+
+Revtain is a payment recovery engine. When a charge fails on your gateway, Revtain takes the same payment, intelligently routes it across a cascade of acquirers, and captures the revenue your gateway couldn't. Your checkout doesn't change. Your customers don't see anything different. You receive a webhook when the payment is recovered.
+
+These docs cover everything you need to integrate Revtain — whether you're using a supported billing platform (no code) or wiring it up to your own.
+
+## Get Started
+
+<CardGroup cols={2}>
+  <Card title="Zero-Code Connectors" icon="plug" href="/guides/connectors">
+    Using Chargebee, Recurly, Stripe Billing, or Braintree? Paste one webhook URL. No code. 5 minutes.
+  </Card>
+  <Card title="API Integration" icon="code" href="/quickstart">
+    Custom billing system or want full control? Recover your first payment in 60 seconds.
+  </Card>
+</CardGroup>
+
+## Explore the Docs
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Your first recovery call in under a minute.
+  </Card>
+  <Card title="Authentication" icon="key" href="/authentication">
+    API keys, webhook secrets, and rate limits.
+  </Card>
+  <Card title="Webhooks" icon="webhook" href="/guides/webhooks">
+    Verify signatures and handle every event type.
+  </Card>
+  <Card title="API Reference" icon="terminal" href="/api-reference">
+    Every endpoint, request, response, and error.
+  </Card>
+  <Card title="Decline Codes" icon="circle-info" href="/concepts/decline-codes">
+    How Revtain handles each category of decline.
+  </Card>
+  <Card title="Troubleshooting" icon="circle-question" href="/guides/troubleshooting">
+    Common errors and how to fix them.
+  </Card>
+</CardGroup>
+
+## Base URL
+
+```
+https://api.revtain.com
+```
+
+Same URL for testing and production. Test mode is controlled by your gateway type — onboard with a test gateway (e.g., Stripe `sk_test_...`) for sandbox, live key for production.

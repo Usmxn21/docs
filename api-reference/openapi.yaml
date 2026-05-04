@@ -1,0 +1,961 @@
+openapi: 3.0.3
+info:
+  title: Revtain API
+  description: |
+    Recover failed payments. No checkout changes. Works with your existing payment stack.
+
+    ## Choose Your Path
+
+    **Using Chargebee, Recurly, Stripe Billing, or Braintree?**
+    Use a Connector — paste one webhook URL, no code, 5 minutes.
+
+    **Custom billing system or want full API control?**
+    Use the Recovery Engine directly. The quickstart gets you to a working recovery call in 60 seconds.
+
+    ## Authentication
+
+    Pass your API key via the `X-API-KEY` header on all requests:
+
+    ```
+    X-API-KEY: rev_dTviCg52T8gLPCjrrW4KA0NKf_f5pQgk
+    ```
+
+    Keep this secret. Your API key can trigger charges. Never expose it in client-side code, public repos, or logs.
+
+    ## Base URL
+
+    ```
+    https://api.revtain.com
+    ```
+
+    Same URL for testing and production. Test mode is controlled by your gateway type — onboard with a test gateway (e.g., Stripe `sk_test_...`) for sandbox, live key for production.
+  version: "1.0.0"
+  contact:
+    email: support@revtain.com
+
+servers:
+  - url: https://api.revtain.com
+    description: Production & Sandbox (test mode controlled by gateway key)
+
+security:
+  - ApiKeyAuth: []
+
+tags:
+  - name: Recovery Engine
+    description: Trigger and track payment recovery attempts
+  - name: Predictive Risk Engine
+    description: Pre-screen payments before they fail
+  - name: Health
+    description: Service health check
+
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-KEY
+      description: "Your Revtain API key (format: `rev_xxx`). Provided during onboarding."
+
+  schemas:
+    ExecuteRecoveryRequest:
+      type: object
+      required:
+        - paymentMethodToken
+        - amount
+      properties:
+        paymentMethodToken:
+          type: string
+          description: "Your gateway's payment token (e.g., Stripe `pm_xxx`, `tok_xxx`, or a Revtain vault token)."
+          example: pm_1234567890
+        amount:
+          type: integer
+          minimum: 50
+          maximum: 100000000
+          description: "Amount in the smallest currency unit (e.g., 5000 = $50.00 USD). For zero-decimal currencies (JPY, KRW, VND), pass the whole amount."
+          example: 5000
+        currency:
+          type: string
+          description: 3-letter ISO 4217 currency code.
+          default: USD
+          example: USD
+        originalDeclineCode:
+          type: string
+          description: "The decline code from your processor. Dramatically improves recovery rate."
+          example: do_not_honor
+        cardOrigin:
+          type: string
+          description: 2-letter ISO country code of the card issuer. Enables geographic routing optimisation.
+          example: US
+        idempotencyKey:
+          type: string
+          maxLength: 128
+          description: Unique key to prevent duplicate recovery attempts. Strongly recommended for production.
+          example: order_12345_retry_1
+        binPrefix:
+          type: string
+          description: First 6 digits of the card (BIN). Enables issuer-level analytics and smarter routing.
+          example: "411111"
+        customerEmail:
+          type: string
+          format: email
+          description: The end customer's email address. Required if dunning is enabled.
+          example: customer@example.com
+        simulateOutcome:
+          type: string
+          enum: [success, failed, blocked]
+          description: "**Sandbox only.** Force a specific outcome for testing. Only honoured when primary gateway is a Test Gateway."
+
+    ExecuteRecoverySuccess:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        message:
+          type: string
+          example: Revenue Recovered
+        error:
+          type: string
+          nullable: true
+          example: null
+        transactionId:
+          type: string
+          example: 01KKZ14FEZK152ZBXEM2XK1B0C
+        strategyUsed:
+          type: string
+          example: primary
+        gatewaysAttempted:
+          type: integer
+          example: 2
+        recoveryEngineApplied:
+          type: boolean
+          example: true
+        ai:
+          type: object
+          properties:
+            score:
+              type: number
+              example: 72.5
+            confidence:
+              type: integer
+              example: 68
+            reasoning:
+              type: string
+              example: "Analysed 142 similar \"do_not_honor\" declines during afternoon hours. $50.00 matches a recoverable pattern."
+            dataSource:
+              type: string
+              example: blended
+
+    ExecuteRecoveryFailed:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        message:
+          type: string
+          example: Recovery Failed
+        error:
+          type: string
+          example: "Purchase request failed: Card declined"
+        transactionId:
+          type: string
+          example: FAILED_API_1773792234011
+        strategyUsed:
+          type: string
+          example: all_failed
+        gatewaysAttempted:
+          type: integer
+          example: 3
+        recoveryEngineApplied:
+          type: boolean
+          example: true
+        ai:
+          type: object
+          properties:
+            score:
+              type: number
+              example: 35.2
+            confidence:
+              type: integer
+              example: 45
+            reasoning:
+              type: string
+            dataSource:
+              type: string
+              example: static
+
+    ExecuteRecoveryQueued:
+      type: object
+      properties:
+        message:
+          type: string
+          example: "Insufficient funds. Queued for Smart-Time Retry at 2026-04-04T06:00:00.000Z."
+
+    ExecuteRecoveryBlocked:
+      type: object
+      properties:
+        error:
+          type: string
+          example: Transaction blocked by Revtain Risk Engine to protect Merchant Health.
+        declineCode:
+          type: string
+          example: fraudulent
+        action:
+          type: string
+          example: blocked
+        recommendation:
+          type: string
+          example: Flag this account for review. The issuer has indicated this card should not be retried.
+
+    ExecuteRecoveryDuplicate:
+      type: object
+      properties:
+        error:
+          type: string
+          example: Duplicate recovery request.
+        message:
+          type: string
+          example: A recovery attempt with this idempotencyKey has already been processed.
+        existingTransactionId:
+          type: string
+          example: da646dba-ce56-4483-ad0a-2a4fac54a5e2
+        existingStatus:
+          type: string
+          example: succeeded
+        existingRecovered:
+          type: boolean
+          example: true
+
+    PulseRequest:
+      type: object
+      required:
+        - amount
+      properties:
+        amount:
+          type: integer
+          minimum: 50
+          maximum: 100000000
+          description: Amount in smallest currency unit.
+          example: 5000
+        currency:
+          type: string
+          default: USD
+          example: USD
+        transactionId:
+          type: string
+          description: Your internal transaction ID. If omitted, Revtain generates one automatically.
+          example: your_internal_tx_id_123
+
+    PulseResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        message:
+          type: string
+          example: Organic success logged
+        transactionId:
+          type: string
+          example: da646dba-ce56-4483-ad0a-2a4fac54a5e2
+
+    TokenizeRequest:
+      type: object
+      required:
+        - paymentMethod
+      properties:
+        paymentMethod:
+          type: object
+          required:
+            - credit_card
+          properties:
+            credit_card:
+              type: object
+              required:
+                - number
+                - month
+                - year
+              properties:
+                number:
+                  type: string
+                  example: "4111111111111111"
+                month:
+                  type: integer
+                  example: 12
+                year:
+                  type: integer
+                  example: 2028
+                verification_value:
+                  type: string
+                  example: "123"
+                first_name:
+                  type: string
+                  example: John
+                last_name:
+                  type: string
+                  example: Doe
+
+    TokenizeResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        token:
+          type: string
+          example: 01KKZ10AD66A3VX260WKM0YFPG
+
+    RecoveryStatusResponse:
+      type: object
+      properties:
+        transactionId:
+          type: string
+          example: 01KKZ14FEZK152ZBXEM2XK1B0C
+        status:
+          type: string
+          enum: [succeeded, failed, blocked, unknown]
+          example: succeeded
+        amount:
+          type: integer
+          example: 5000
+        currency:
+          type: string
+          example: USD
+        recoveredAt:
+          type: string
+          format: date-time
+          example: "2026-03-17T23:15:21.000Z"
+        strategyUsed:
+          type: string
+          example: primary
+
+    CardUpdateRequest:
+      type: object
+      required:
+        - paymentMethodToken
+      properties:
+        paymentMethodToken:
+          type: string
+          description: The token for the card that needs updating.
+          example: 01KKZ10AD66A3VX260WKM0YFPG
+
+    CardUpdateResponse:
+      type: object
+      properties:
+        url:
+          type: string
+          format: uri
+          example: "https://pay.yourdomain.com/api/recovery/update-card/abc123xyz..."
+        token:
+          type: string
+          example: abc123xyz...
+        expiresAt:
+          type: string
+          format: date-time
+          example: "2026-04-23T14:30:00.000Z"
+
+    PredictRiskRequest:
+      type: object
+      required:
+        - paymentMethodToken
+        - amount
+      properties:
+        paymentMethodToken:
+          type: string
+          description: Your gateway's payment token or Revtain vault token.
+          example: 01KKZ10AD66A3VX260WKM0YFPG
+        amount:
+          type: integer
+          description: Amount in cents.
+          example: 5000
+        currency:
+          type: string
+          default: USD
+          example: USD
+        scheduledDate:
+          type: string
+          format: date-time
+          description: ISO 8601 date for scheduled transactions. Improves prediction accuracy.
+          example: "2026-04-15T10:00:00.000Z"
+
+    PredictRiskResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        prediction:
+          type: object
+          properties:
+            riskScore:
+              type: number
+              example: 72.5
+            confidence:
+              type: integer
+              example: 68
+            reasoning:
+              type: string
+              example: "Card has 3 prior declines in last 30 days. Amount matches a historically recoverable pattern."
+            factors:
+              type: array
+              items:
+                type: string
+              example: [prior_decline_history, amount_pattern_match, time_of_day_risk]
+            recommendation:
+              type: string
+              enum: [proceed, proceed_with_caution, delay, block]
+              example: proceed_with_caution
+
+    RecordOutcomeRequest:
+      type: object
+      required:
+        - paymentMethodToken
+        - actualOutcome
+      properties:
+        paymentMethodToken:
+          type: string
+          description: The same token used in the `/predict/risk` call.
+          example: 01KKZ10AD66A3VX260WKM0YFPG
+        actualOutcome:
+          type: string
+          enum: [succeeded, failed, blocked]
+          description: What actually happened.
+          example: succeeded
+
+    RecordOutcomeResponse:
+      type: object
+      properties:
+        predictionId:
+          type: string
+          example: pred_a1b2c3d4e5f6
+        predictedRecommendation:
+          type: string
+          example: proceed_with_caution
+        actualOutcome:
+          type: string
+          example: succeeded
+        accurate:
+          type: boolean
+          example: true
+
+    ValidationError:
+      type: object
+      properties:
+        error:
+          type: string
+          example: Validation failed.
+        details:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              type: string
+          example:
+            paymentMethodToken: [Payment method token is required]
+            amount: [Amount must be a positive number]
+
+    RateLimitError:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "Too many recovery requests. Rate limit: 60 requests per minute per API key."
+        retryAfter:
+          type: string
+          example: 60 seconds
+
+    NotFoundError:
+      type: object
+      properties:
+        error:
+          type: string
+          example: Transaction not found.
+
+    UnauthorizedError:
+      type: object
+      properties:
+        error:
+          type: string
+          example: Unauthorized. Missing or invalid API key.
+
+paths:
+  /api/recovery/execute:
+    post:
+      tags:
+        - Recovery Engine
+      summary: Execute Recovery
+      description: |
+        The core recovery endpoint. When a payment fails in your billing system, call this to trigger the intelligent recovery engine.
+
+        **Rate limit:** 60 requests per minute per API key.
+
+        ### Response Summary
+
+        | Status | Meaning |
+        |--------|---------|
+        | `200` + `success: true` | Payment recovered immediately |
+        | `200` + `success: false` | All strategies exhausted, payment not recovered |
+        | `202` | Queued for smart-time retry |
+        | `403` | Blocked by risk engine — do NOT retry |
+        | `409` | Duplicate request (idempotency key already used) |
+        | `429` | Rate limit exceeded |
+
+        ### Decline Codes
+
+        | Category | Example Codes | What Happens |
+        |----------|---------------|--------------|
+        | Recoverable | `insufficient_funds`, `do_not_honor`, `call_issuer`, `try_again_later`, `card_declined` | Optimal recovery strategy applied |
+        | Blocked | `fraudulent`, `lost_card`, `pickup_card`, `restricted_card` | Transaction blocked, webhook fired |
+        | Unknown | Any unrecognised code | Conservative recovery attempted |
+      operationId: executeRecovery
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ExecuteRecoveryRequest"
+            examples:
+              basic:
+                summary: Basic recovery request
+                value:
+                  paymentMethodToken: pm_1234567890
+                  amount: 5000
+                  currency: USD
+                  originalDeclineCode: do_not_honor
+                  idempotencyKey: order_12345_retry_1
+              full:
+                summary: Full request with all optional fields
+                value:
+                  paymentMethodToken: pm_1234567890
+                  amount: 5000
+                  currency: USD
+                  originalDeclineCode: do_not_honor
+                  cardOrigin: US
+                  idempotencyKey: order_12345_retry_1
+                  binPrefix: "411111"
+                  customerEmail: customer@example.com
+              simulate_success:
+                summary: Simulate success (sandbox only)
+                value:
+                  paymentMethodToken: pm_test_123
+                  amount: 5000
+                  currency: USD
+                  originalDeclineCode: do_not_honor
+                  simulateOutcome: success
+              simulate_failed:
+                summary: Simulate failure (sandbox only)
+                value:
+                  paymentMethodToken: pm_test_123
+                  amount: 5000
+                  currency: USD
+                  originalDeclineCode: do_not_honor
+                  simulateOutcome: failed
+              simulate_blocked:
+                summary: Simulate block (sandbox only)
+                value:
+                  paymentMethodToken: pm_test_123
+                  amount: 5000
+                  currency: USD
+                  originalDeclineCode: fraudulent
+                  simulateOutcome: blocked
+      responses:
+        "200":
+          description: Recovery attempt completed (check `success` field for outcome)
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/ExecuteRecoverySuccess"
+                  - $ref: "#/components/schemas/ExecuteRecoveryFailed"
+              examples:
+                recovered:
+                  summary: Payment recovered
+                  value:
+                    success: true
+                    message: Revenue Recovered
+                    error: null
+                    transactionId: 01KKZ14FEZK152ZBXEM2XK1B0C
+                    strategyUsed: primary
+                    gatewaysAttempted: 2
+                    recoveryEngineApplied: true
+                    ai:
+                      score: 72.5
+                      confidence: 68
+                      reasoning: "Analysed 142 similar \"do_not_honor\" declines during afternoon hours."
+                      dataSource: blended
+                failed:
+                  summary: Recovery failed
+                  value:
+                    success: false
+                    message: Recovery Failed
+                    error: "Purchase request failed: Card declined"
+                    transactionId: FAILED_API_1773792234011
+                    strategyUsed: all_failed
+                    gatewaysAttempted: 3
+                    recoveryEngineApplied: true
+                    ai:
+                      score: 35.2
+                      confidence: 45
+                      reasoning: Recovery engine applied optimal strategy for this decline type.
+                      dataSource: static
+        "202":
+          description: "Queued for smart-time retry. You'll receive a webhook when the outcome is final."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExecuteRecoveryQueued"
+              example:
+                message: "Insufficient funds. Queued for Smart-Time Retry at 2026-04-04T06:00:00.000Z."
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ValidationError"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UnauthorizedError"
+        "403":
+          description: Blocked by risk engine — do NOT retry this payment
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExecuteRecoveryBlocked"
+              example:
+                error: Transaction blocked by Revtain Risk Engine to protect Merchant Health.
+                declineCode: fraudulent
+                action: blocked
+                recommendation: Flag this account for review. The issuer has indicated this card should not be retried.
+        "409":
+          description: Duplicate recovery request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExecuteRecoveryDuplicate"
+        "429":
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RateLimitError"
+
+  /api/recovery/pulse:
+    post:
+      tags:
+        - Recovery Engine
+      summary: Log Organic Success (Pulse)
+      description: |
+        Logs an organic success — a transaction that succeeded on the first try without needing recovery.
+
+        This data is used to calculate the **Revtain Lift** metric (the percentage improvement Revtain adds over your baseline success rate).
+
+        > **Important:** Without pulse data, your monthly CFO report will show a misleadingly high recovery rate because the only transactions recorded are recovery attempts.
+      operationId: logPulse
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PulseRequest"
+            example:
+              amount: 5000
+              currency: USD
+              transactionId: your_internal_tx_id_123
+      responses:
+        "200":
+          description: Organic success logged
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PulseResponse"
+              example:
+                success: true
+                message: Organic success logged
+                transactionId: da646dba-ce56-4483-ad0a-2a4fac54a5e2
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ValidationError"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UnauthorizedError"
+
+  /api/recovery/tokenize:
+    post:
+      tags:
+        - Recovery Engine
+      summary: Tokenize Card
+      description: |
+        Server-to-server card tokenization for ENGINE_ROOM clients with their own PCI Level 1 clearance.
+
+        FAST_TRACK clients do not need this endpoint — you already have tokens from your payment gateway.
+
+        > **PCI Requirement:** This endpoint accepts raw card data (PAN, CVV, expiry). Your servers must be PCI DSS Level 1 compliant to use it. Contact Revtain to enable `tokenizeEnabled` on your account.
+
+        **Rate limit:** 10 requests per minute per API key.
+      operationId: tokenizeCard
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TokenizeRequest"
+            example:
+              paymentMethod:
+                credit_card:
+                  number: "4111111111111111"
+                  month: 12
+                  year: 2028
+                  verification_value: "123"
+                  first_name: John
+                  last_name: Doe
+      responses:
+        "200":
+          description: Card tokenized successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TokenizeResponse"
+              example:
+                success: true
+                token: 01KKZ10AD66A3VX260WKM0YFPG
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UnauthorizedError"
+        "403":
+          description: Tokenization not enabled on your account
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: Tokenization is not enabled for this account. Contact Revtain to enable.
+
+  /api/recovery/status/{transactionId}:
+    get:
+      tags:
+        - Recovery Engine
+      summary: Get Recovery Status
+      description: |
+        Poll the current status of a recovery attempt.
+
+        The `transactionId` is the value returned from `/api/recovery/execute`.
+
+        > Clients can only query their own transactions.
+      operationId: getRecoveryStatus
+      parameters:
+        - name: transactionId
+          in: path
+          required: true
+          description: The transaction ID returned from `/api/recovery/execute`.
+          schema:
+            type: string
+          example: 01KKZ14FEZK152ZBXEM2XK1B0C
+      responses:
+        "200":
+          description: Recovery status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RecoveryStatusResponse"
+              example:
+                transactionId: 01KKZ14FEZK152ZBXEM2XK1B0C
+                status: succeeded
+                amount: 5000
+                currency: USD
+                recoveredAt: "2026-03-17T23:15:21.000Z"
+                strategyUsed: primary
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UnauthorizedError"
+        "404":
+          description: Transaction not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotFoundError"
+
+  /api/recovery/update-card/generate:
+    post:
+      tags:
+        - Recovery Engine
+      summary: Generate Card Update Link
+      description: |
+        Generate a secure, time-limited URL that your customer can visit to update their payment method.
+
+        The page is branded to your business — your customer sees your name, not Revtain's.
+
+        - URL is valid for **72 hours** and can only be used once
+        - When the customer updates their card, you'll receive a `card.updated` webhook
+        - For a seamless customer experience, configure a custom domain (CNAME `pay.yourdomain.com` → `api.revtain.com`)
+      operationId: generateCardUpdateLink
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CardUpdateRequest"
+            example:
+              paymentMethodToken: 01KKZ10AD66A3VX260WKM0YFPG
+      responses:
+        "201":
+          description: Card update link created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CardUpdateResponse"
+              example:
+                url: "https://pay.yourdomain.com/api/recovery/update-card/abc123xyz..."
+                token: abc123xyz...
+                expiresAt: "2026-04-23T14:30:00.000Z"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ValidationError"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UnauthorizedError"
+
+  /api/predict/risk:
+    post:
+      tags:
+        - Predictive Risk Engine
+      summary: Predict Transaction Risk
+      description: |
+        Predicts the risk score for a transaction before executing it. Use this to pre-screen payments and decide whether to proceed, delay, or block.
+
+        ### Recommendation Values
+
+        | Value | Meaning |
+        |-------|---------|
+        | `proceed` | Low risk, charge normally |
+        | `proceed_with_caution` | Moderate risk, monitor closely |
+        | `delay` | High risk, consider delaying the charge |
+        | `block` | Very high risk, do not charge |
+      operationId: predictRisk
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PredictRiskRequest"
+            example:
+              paymentMethodToken: pm_1234567890
+              amount: 5000
+              currency: USD
+      responses:
+        "200":
+          description: Risk prediction
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PredictRiskResponse"
+              example:
+                success: true
+                prediction:
+                  riskScore: 72.5
+                  confidence: 68
+                  reasoning: "Card has 3 prior declines in last 30 days. Amount matches a historically recoverable pattern."
+                  factors:
+                    - prior_decline_history
+                    - amount_pattern_match
+                    - time_of_day_risk
+                  recommendation: proceed_with_caution
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ValidationError"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UnauthorizedError"
+
+  /api/predict/outcome:
+    post:
+      tags:
+        - Predictive Risk Engine
+      summary: Record Prediction Outcome
+      description: |
+        Records the actual outcome of a previously predicted transaction.
+
+        This feedback loop improves prediction accuracy over time. Call this after every transaction you pre-screened with `/predict/risk`.
+      operationId: recordOutcome
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RecordOutcomeRequest"
+            example:
+              paymentMethodToken: pm_1234567890
+              actualOutcome: succeeded
+      responses:
+        "200":
+          description: Outcome recorded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RecordOutcomeResponse"
+              example:
+                predictionId: pred_a1b2c3d4e5f6
+                predictedRecommendation: proceed_with_caution
+                actualOutcome: succeeded
+                accurate: true
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ValidationError"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UnauthorizedError"
+
+  /health:
+    get:
+      tags:
+        - Health
+      summary: Health Check
+      description: Returns the current health status of the Revtain API.
+      operationId: healthCheck
+      security: []
+      responses:
+        "200":
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok

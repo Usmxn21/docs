@@ -1,0 +1,61 @@
+---
+title: "Dunning Sequences"
+description: "How Revtain's dunning works — webhook-driven, no customer-facing emails from Revtain."
+---
+
+When `dunningEnabled` is set to `true`, Revtain sends a `recovery.failed` webhook to your system whenever the recovery engine exhausts all strategies. **This is the default — one webhook, no spam.**
+
+<Info>
+  **Revtain does not send customer-facing emails or SMS.** Dunning is webhook-only — your system handles customer communication on your domain, with your branding. This keeps you in control of the customer relationship.
+</Info>
+
+## How It Works
+
+<Steps>
+  <Step title="Recovery engine exhausts all gateways">
+    Payment fails after primary + cascade attempts.
+  </Step>
+  <Step title="Your system receives a recovery.failed webhook">
+    Includes full transaction details, decline code, strategy used.
+  </Step>
+  <Step title="Your system decides what to do">
+    Flag the invoice, trigger your own dunning, generate a [card update link](/guides/card-update-links), etc.
+  </Step>
+  <Step title="If the payment is later recovered">
+    Manual retry, card update, or account updater — any pending dunning steps are cancelled automatically.
+  </Step>
+</Steps>
+
+## Opt-In Email/SMS Alerts (For You, Not Customers)
+
+If you want Revtain to also notify **you** (the merchant) via email or SMS when recoveries fail, add those channels during onboarding:
+
+```json
+{
+  "notificationChannels": ["WEBHOOK", "EMAIL", "SMS"]
+}
+```
+
+These alerts go to **you**, not your customer. They're informational — *"a $25.00 payment failed, consider reaching out to the customer."*
+
+## Recommended Workflow
+
+<Steps>
+  <Step title="Receive recovery.failed webhook">
+    From Revtain.
+  </Step>
+  <Step title="Generate a card update link">
+    Call `POST /api/recovery/update-card/generate` to create a secure URL.
+  </Step>
+  <Step title="Send the URL to your customer">
+    Via **your own** email/SMS system — your domain, your branding.
+  </Step>
+  <Step title="Customer updates their card">
+    You receive a `card.updated` webhook.
+  </Step>
+  <Step title="Retry the payment">
+    Call `POST /api/recovery/execute` with the new token.
+  </Step>
+</Steps>
+
+This keeps you in control of the customer relationship. Revtain handles the recovery engine and provides the tools — you handle the customer communication.

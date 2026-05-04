@@ -1,0 +1,175 @@
+---
+title: "Troubleshooting"
+description: "Common errors and how to fix them."
+---
+
+## API Errors
+
+### `409 Conflict` — Duplicate recovery request
+
+```json
+{
+  "error": "Duplicate recovery request.",
+  "message": "A recovery attempt with this idempotencyKey has already been processed.",
+  "existingTransactionId": "...",
+  "existingStatus": "succeeded"
+}
+```
+
+**Cause:** You sent the same `idempotencyKey` twice, OR the same card + amount within 5 minutes (velocity check).
+
+**Fix:** This is **expected** and protects you from double-charging. Use the `existingTransactionId` to look up the original outcome — don't retry. If your retry logic is firing duplicate calls, ensure `idempotencyKey` is generated **once per logical retry attempt**, not on every code path.
+
+---
+
+### `429 Too Many Requests` — Rate limit exceeded
+
+```json
+{
+  "error": "Too many recovery requests. Rate limit: 60 requests per minute per API key.",
+  "retryAfter": "60 seconds"
+}
+```
+
+**Cause:** You exceeded 60 recovery requests per minute (or 10/min on `/tokenize`).
+
+**Fix:** Implement exponential backoff using the `retryAfter` value. If you're consistently hitting this, contact [support@revtain.com](mailto:support@revtain.com) — we can raise limits for legitimate workloads.
+
+---
+
+### `403 Forbidden` — Transaction blocked by risk engine
+
+```json
+{
+  "error": "Transaction blocked by Revtain Risk Engine to protect Merchant Health.",
+  "declineCode": "fraudulent",
+  "action": "blocked"
+}
+```
+
+**Cause:** The original decline code (e.g., `fraudulent`, `lost_card`, `pickup_card`) indicates the issuer wants this card stopped.
+
+**Fix:** **Do not retry.** Flag the customer account for review. Retrying these will trigger chargebacks and damage your merchant standing. See [Decline Codes](/concepts/decline-codes) for the full list.
+
+---
+
+### `401 Unauthorized` — Missing or invalid API key
+
+**Causes:**
+- API key not sent in the `X-API-KEY` header
+- API key is from a different environment (test key on production endpoint, etc.)
+- API key was rotated
+
+**Fix:** Confirm the header is `X-API-KEY` (not `Authorization` or `X-Api-Key`). Check your environment variables. If rotated, update your secret store and redeploy.
+
+---
+
+### `202 Accepted` — Queued for retry
+
+```json
+{
+  "message": "Insufficient funds. Queued for Smart-Time Retry at 2026-04-04T06:00:00.000Z."
+}
+```
+
+**Cause:** The decline code suggests retrying at a later time will improve recovery odds (e.g., `insufficient_funds` retried after payday).
+
+**Fix:** This is **expected** — not an error. Wait for the webhook (`recovery.success` or `recovery.failed`) to confirm the final outcome. Don't poll the status endpoint aggressively; the webhook is the source of truth.
+
+---
+
+### `202 Accepted` with `status: "unknown"` — Ambiguous gateway response
+
+```json
+{
+  "status": "unknown",
+  "message": "Recovery attempt result unknown. The gateway returned an ambiguous response."
+}
+```
+
+**Cause:** The gateway returned a 5xx error or timed out. The charge may or may not have gone through.
+
+**Fix:** Check your gateway dashboard to confirm. The Spreedly async webhook will eventually fire with the final state. **Do not retry on the same idempotency key** — you risk a double-charge.
+
+## Webhook Issues
+
+### Webhook returning `401` to my own endpoint
+
+**Cause:** Signature mismatch. Either you're hashing the wrong payload, or your `webhookSigningSecret` is wrong.
+
+**Fix:**
+1. Confirm you're using the `webhookSigningSecret` from onboarding (starts with `whsec_`), not the API key (starts with `rev_`).
+2. Hash the **raw request body** (not parsed JSON) with HMAC-SHA256.
+3. Use a timing-safe comparison (e.g., `crypto.timingSafeEqual` in Node, `hmac.compare_digest` in Python).
+4. See the [Webhooks Guide](/guides/webhooks#code-examples) for verified code samples.
+
+---
+
+### Webhook never arrives
+
+**Causes & fixes:**
+- **Endpoint isn't HTTPS** → Revtain only delivers to HTTPS URLs.
+- **Endpoint returned non-200** → After 3 retries (0s, 2s, 8s), Revtain stops trying. Check your logs for failed deliveries.
+- **Endpoint took longer than 10 seconds** → Treated as failure. Acknowledge the webhook with `200` immediately, then process async.
+- **Wrong URL registered** → Re-check your onboarding settings.
+
+---
+
+### Webhook arrives but content seems stale
+
+**Cause:** You may be reading from a cached version, or the event was retried after a delay.
+
+**Fix:** Always trust the `revtainTransactionId` and look up current state via [`GET /api/recovery/status/:id`](/api-reference/endpoint/get-recovery-status) if uncertain.
+
+## Connector Issues
+
+### Connector fires but no recovery happens
+
+**Cause:** Revtain couldn't extract the gateway token from your billing platform's API.
+
+**Common reasons:**
+- API key has insufficient permissions (see your connector's required permissions)
+- Customer has no payment source on file
+- Test/live mode mismatch (test webhook hitting live gateway, etc.)
+
+**Fix:** Check the Revtain admin dashboard logs. Each connector failure is logged with the specific reason.
+
+---
+
+### Invoice not marked as paid after success
+
+**Cause:** Revtain recovered the charge on a backup gateway, but the invoice on your billing platform is tracked against the primary gateway.
+
+**Fix:**
+- For **Chargebee** and **Recurly**, this is automatic via API.
+- For **Stripe Billing**, the invoice is paid via Stripe's `pay_invoice` API — check the invoice timeline in the Stripe Dashboard for confirmation.
+- For **Braintree**, the subscription auto-detects the recovered payment.
+
+If you still see issues, check that the connector has write permissions on invoices/transactions.
+
+## Testing Issues
+
+### `simulateOutcome` is being ignored
+
+**Cause:** Your primary gateway is **not** a Test Gateway. The `simulateOutcome` parameter is **only honoured** with test gateways.
+
+**Fix:** Onboard a test gateway (Revtain Test Gateway, Stripe `sk_test_...`, Braintree Sandbox) for sandbox testing. In production, `simulateOutcome` is silently ignored.
+
+---
+
+### Test card declined but I expected success
+
+**Cause:** Test cards (`4111 1111 1111 1111`, etc.) only succeed on test gateways. They're rejected by live gateways.
+
+**Fix:** Confirm your primary gateway is in test mode. See [Testing Guide](/guides/testing).
+
+## Still Stuck?
+
+Email [support@revtain.com](mailto:support@revtain.com) with:
+- Your client ID (from onboarding)
+- The `transactionId` (if you have one)
+- The full request payload (redact card numbers)
+- The full response body
+- Approximate timestamp
+
+We respond within 4 business hours.

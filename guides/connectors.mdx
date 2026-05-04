@@ -1,0 +1,106 @@
+---
+title: "Zero-Code Connectors"
+description: "Native integrations for Chargebee, Recurly, Stripe Billing, and Braintree. No code required."
+---
+
+For Chargebee, Recurly, Stripe Billing, and Braintree Subscriptions, Revtain provides direct connectors that require **no code on your side**. Paste a single webhook URL into your billing platform settings — Revtain handles everything.
+
+## How Connectors Work
+
+<Steps>
+  <Step title="Select your billing platform during onboarding">
+    Provide your platform API key (Chargebee API key, Recurly API key, etc.).
+  </Step>
+  <Step title="Get your unique webhook URL">
+    Revtain generates a webhook URL with your client ID embedded.
+  </Step>
+  <Step title="Paste it into your billing platform's webhook settings">
+    Select the relevant payment failure event (e.g., `payment_failed`).
+  </Step>
+  <Step title="Done — Revtain handles the rest">
+    On every failed payment: extract the gateway token, run the recovery engine, mark the invoice paid on success.
+  </Step>
+</Steps>
+
+<Check>
+  No webhook handler to write. No API calls to make. No code to deploy.
+</Check>
+
+## Supported Connectors
+
+| Platform | Webhook URL Pattern | Event Handled |
+|----------|---------------------|---------------|
+| **Chargebee** | `https://api.revtain.com/api/connectors/chargebee/webhook/{clientId}` | `payment_failed` |
+| **Recurly** | `https://api.revtain.com/api/connectors/recurly/webhook/{clientId}` | `failed_payment` |
+| **Stripe Billing** | `https://api.revtain.com/api/connectors/stripe-billing/webhook/{clientId}` | `invoice.payment_failed` |
+| **Braintree Subscriptions** | `https://api.revtain.com/api/connectors/braintree/webhook/{clientId}` | `subscription_went_past_due` |
+
+## Setup Instructions
+
+<AccordionGroup>
+  <Accordion title="Chargebee" icon="credit-card">
+    1. During Revtain onboarding, select **Chargebee** as your billing platform
+    2. Enter your Chargebee API key and site name (the `xxx` in `xxx.chargebee.com`)
+    3. In Chargebee, go to **Settings → Configure Chargebee → Webhooks**
+    4. Add a new webhook with the URL shown in your credentials modal (includes your client ID)
+    5. Select the `payment_failed` event
+
+    **What Revtain does automatically:**
+    - Looks up the customer's Stripe payment token from Chargebee's payment sources
+    - Runs the recovery engine with the decline code from the failed transaction
+    - On success, records the payment on the Chargebee invoice
+  </Accordion>
+
+  <Accordion title="Recurly" icon="credit-card">
+    1. During Revtain onboarding, select **Recurly** as your billing platform
+    2. Enter your Recurly API key and subdomain
+    3. In Recurly, go to **Integrations → Webhooks**
+    4. Add a new webhook endpoint using the URL from your credentials modal
+    5. Select the `failed_payment` event
+
+    **What Revtain does automatically:**
+    - Retrieves the gateway token from the customer's billing info via Recurly's API
+    - Runs the recovery engine
+    - On success, records an external payment on the Recurly account
+  </Accordion>
+
+  <Accordion title="Stripe Billing" icon="stripe">
+    1. During Revtain onboarding, select **Stripe Billing** as your billing platform
+    2. Your Stripe secret key is already provided as your gateway key — no additional key needed
+    3. In Stripe, go to **Developers → Webhooks**
+    4. Add a new endpoint using the URL from your credentials modal
+    5. Select the `invoice.payment_failed` event
+
+    **What Revtain does automatically:**
+    - Looks up the customer's default payment method via the Stripe API
+    - Runs the recovery engine with the invoice decline code
+    - On success, pays the Stripe invoice via the Stripe API
+  </Accordion>
+
+  <Accordion title="Braintree Subscriptions" icon="credit-card">
+    1. During Revtain onboarding, select **Braintree** as your billing platform
+    2. Your Braintree credentials are already provided as your gateway key — no additional key needed
+    3. In Braintree, go to **Settings → Webhooks**
+    4. Add a new webhook destination using the URL from your credentials modal
+    5. Select the `Subscription Went Past Due` notification
+
+    **What Revtain does automatically:**
+    - Extracts the payment method token directly from the subscription data
+    - Runs the recovery engine with the processor response code
+    - On success, Braintree detects the payment and updates the subscription status
+  </Accordion>
+</AccordionGroup>
+
+## Connector vs. API Integration
+
+| | Connector (Recommended) | API Integration |
+|---|---|---|
+| **Code required** | None — paste one URL | Webhook handler + API calls |
+| **Setup time** | 5 minutes | 30-60 minutes |
+| **Invoice reconciliation** | Automatic | Manual (in your webhook handler) |
+| **Available for** | Chargebee, Recurly, Stripe Billing, Braintree | Any billing system |
+| **Customisation** | Standard recovery flow | Full control |
+
+<Note>
+  **Using a different billing platform?** Use the [API integration](/guides/api-integration) — Revtain works with any system that can make HTTP calls.
+</Note>

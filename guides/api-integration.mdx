@@ -1,0 +1,188 @@
+---
+title: "API Integration"
+description: "Custom billing system or full API control. Recommended Fast Track flow with code examples."
+---
+
+This guide shows the recommended **Fast Track** flow: your checkout stays exactly as it is, and Revtain handles recovery when payments fail.
+
+<Info>
+  **Your checkout doesn't change.** Customers continue to pay with Stripe, Apple Pay, Google Pay — whatever you already support. Revtain operates entirely behind the scenes. No iFrame, no UI changes, nothing customer-facing.
+</Info>
+
+## How It Works
+
+<Steps>
+  <Step title="Customer pays through your existing checkout">
+    Stripe, Chargebee, custom — anything.
+  </Step>
+  <Step title="Payment succeeds → log it (optional)">
+    Call `/pulse` so Revtain can calculate Lift accurately.
+  </Step>
+  <Step title="Payment fails → hand off to Revtain">
+    Pass the gateway token, amount, and decline code.
+  </Step>
+  <Step title="Revtain runs the engine">
+    AI scoring, heuristics, multi-gateway cascade.
+  </Step>
+  <Step title="You receive a webhook with the result">
+    `recovery.success`, `recovery.failed`, or `recovery.blocked`.
+  </Step>
+</Steps>
+
+## Backend: Charge, Then Recover
+
+<CodeGroup>
+
+```javascript Node.js
+app.post('/your-backend/charge', async (req, res) => {
+  const { paymentMethodId, amount, stripeCustomerId } = req.body;
+
+  let declineCode;
+
+  // 1. Try charging through YOUR primary gateway using YOUR token
+  //    (Your normal checkout — Revtain not involved yet)
+  try {
+    const charge = await stripe.paymentIntents.create({
+      amount,
+      currency: 'usd',
+      customer: stripeCustomerId,
+      payment_method: 'pm_xxx',
+      confirm: true
+    });
+
+    // Log the organic success so Revtain can calculate Lift
+    await fetch(`${REVTAIN_BASE_URL}/api/recovery/pulse`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-API-KEY': process.env.REVTAIN_API_KEY
+      },
+      body: JSON.stringify({ amount, currency: 'USD', transactionId: charge.id })
+    });
+
+    return res.json({ success: true, chargeId: charge.id });
+  } catch (stripeError) {
+    declineCode = stripeError.decline_code;
+  }
+
+  // 2. Primary failed — hand off to Revtain
+  const recovery = await fetch(`${REVTAIN_BASE_URL}/api/recovery/execute`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-API-KEY': process.env.REVTAIN_API_KEY
+    },
+    body: JSON.stringify({
+      paymentMethodToken: paymentMethodId,
+      amount,
+      currency: 'USD',
+      originalDeclineCode: declineCode,
+      cardOrigin: 'US',
+      idempotencyKey: `order_${orderId}_recovery`
+    })
+  });
+
+  const result = await recovery.json();
+
+  if (recovery.status === 200 && result.success) {
+    return res.json({ success: true, recovered: true, transactionId: result.transactionId });
+  } else if (recovery.status === 202) {
+    return res.json({ success: false, queued: true, message: result.message });
+  } else if (recovery.status === 403) {
+    return res.status(403).json({ success: false, blocked: true, error: result.error });
+  } else if (recovery.status === 409) {
+    return res.json({ success: false, duplicate: true, existing: result.existingTransactionId });
+  }
+
+  return res.json({ success: false, error: result.error || result.message });
+});
+```
+
+```python Python
+import requests, os
+
+@app.route('/your-backend/charge', methods=['POST'])
+def charge():
+    data = request.json
+    payment_method_id = data['paymentMethodId']
+    amount = data['amount']
+
+    # 1. Try your primary gateway
+    try:
+        intent = stripe.PaymentIntent.create(
+            amount=amount, currency='usd',
+            customer=data['stripeCustomerId'],
+            payment_method='pm_xxx',
+            confirm=True
+        )
+
+        requests.post(
+            f"{REVTAIN_BASE_URL}/api/recovery/pulse",
+            headers={'X-API-KEY': os.environ['REVTAIN_API_KEY']},
+            json={'amount': amount, 'currency': 'USD'}
+        )
+        return jsonify(success=True, chargeId=intent.id)
+    except stripe.error.CardError as e:
+        decline_code = e.error.decline_code
+
+    # 2. Hand off to Revtain
+    response = requests.post(
+        f"{REVTAIN_BASE_URL}/api/recovery/execute",
+        headers={
+            'Content-Type': 'application/json',
+            'X-API-KEY': os.environ['REVTAIN_API_KEY']
+        },
+        json={
+            'paymentMethodToken': payment_method_id,
+            'amount': amount,
+            'currency': 'USD',
+            'originalDeclineCode': decline_code,
+            'cardOrigin': 'US',
+            'idempotencyKey': f'order_{order_id}_recovery'
+        }
+    )
+
+    result = response.json()
+    if response.status_code == 200 and result.get('success'):
+        return jsonify(success=True, recovered=True, transactionId=result['transactionId'])
+    elif response.status_code == 202:
+        return jsonify(success=False, queued=True, message=result['message'])
+    elif response.status_code == 403:
+        return jsonify(success=False, blocked=True, error=result['error']), 403
+    elif response.status_code == 409:
+        return jsonify(success=False, duplicate=True)
+
+    return jsonify(error='Recovery failed'), 500
+```
+
+</CodeGroup>
+
+## Custom / In-House Billing
+
+For in-house billing without a webhook event, call Revtain directly from your payment failure handler:
+
+```javascript
+async function handlePaymentFailure(payment) {
+  const recovery = await fetch('https://api.revtain.com/api/recovery/execute', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-API-KEY': process.env.REVTAIN_API_KEY
+    },
+    body: JSON.stringify({
+      paymentMethodToken: payment.paymentToken,
+      amount: payment.amountCents,
+      currency: payment.currency || 'USD',
+      originalDeclineCode: payment.declineCode || 'unknown',
+      idempotencyKey: `custom_${payment.id}_recovery`
+    })
+  });
+  return recovery.json();
+}
+```
+
+The only requirement is that you have the customer's payment token from your gateway. Everything else is the same regardless of billing platform.
+
+<Tip>
+  **Need help?** Contact the Revtain team at [support@revtain.com](mailto:support@revtain.com) for guidance on integrating with your specific billing platform.
+</Tip>

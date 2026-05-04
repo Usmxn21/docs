@@ -1,0 +1,43 @@
+---
+title: "Decline Codes Reference"
+description: "How Revtain handles each category of decline code."
+---
+
+When passing `originalDeclineCode`, the recovery engine automatically determines the optimal recovery path for each decline type. **The more context you provide, the higher the recovery rate.**
+
+## Supported Categories
+
+| Category | Example Codes | What Happens |
+|----------|---------------|--------------|
+| **Recoverable** | `insufficient_funds`, `do_not_honor`, `call_issuer`, `try_again_later`, `card_declined`, `generic_decline`, `expired_card` | The engine applies the optimal recovery strategy for this decline type. Recovery is attempted automatically. |
+| **Blocked** | `fraudulent`, `lost_card`, `pickup_card`, `restricted_card`, `fraud_suspected` | Transaction is blocked to protect the merchant. **No recovery attempted.** Webhook notification sent. |
+| **Unknown** | Any unrecognised code | Conservative recovery attempted. |
+| **Not provided** | `null` / omitted | Recovery attempted using available transaction signals. |
+
+<Tip>
+  **Always pass the `originalDeclineCode` from your payment processor.** The engine's recovery rate improves significantly when it can read the specific decline reason. Passing no code results in a generic recovery attempt.
+</Tip>
+
+## Why Decline Codes Matter
+
+Different declines need different strategies:
+
+- **`insufficient_funds`** → Retry on payday, end of month, or after a known billing cycle
+- **`do_not_honor`** → Retry through a backup gateway with different MID
+- **`expired_card`** → Refresh token via account updater first
+- **`fraudulent`** → Block immediately — retrying causes chargebacks and damages merchant health
+
+The Revtain engine encodes these patterns based on industry-wide observation. By passing the decline code, you let the engine pick the right path automatically.
+
+## What Happens with Blocked Codes
+
+For blocked decline codes (e.g., `fraudulent`, `lost_card`), Revtain:
+
+1. Returns `403 Forbidden` immediately
+2. Fires a `recovery.blocked` webhook
+3. Records the transaction as blocked
+4. Does **not** attempt any retry on any gateway
+
+<Warning>
+  **Do not retry blocked transactions on your own.** Repeatedly attempting fraudulent or lost-card payments will trigger chargebacks and damage your merchant account standing.
+</Warning>

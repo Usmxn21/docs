@@ -1,0 +1,84 @@
+---
+title: "Testing"
+description: "Test cards, simulated outcomes, and the simulateOutcome parameter for end-to-end testing."
+---
+
+Use `https://api.revtain.com` for all development and testing. Test mode is controlled by your gateway type — onboard with a test gateway for sandbox behavior.
+
+<Warning>
+  Test cards and artificial decline codes are **only recognised when your primary gateway is a test gateway**. Using them with a live gateway will fail.
+</Warning>
+
+## Test Cards (Test Gateway Only)
+
+| Card Number | Brand | Test Gateway Result | Live Gateway |
+|-------------|-------|---------------------|--------------|
+| `4111 1111 1111 1111` | Visa | Always succeeds | Rejected |
+| `5555 5555 5555 4444` | Mastercard | Always succeeds | Rejected |
+| `3782 822463 10005` | Amex | Always succeeds | Rejected |
+| `3530 1113 3330 0000` | JCB | Always succeeds | Rejected |
+
+**Live gateways:** Use only real credit card numbers from your actual test merchant accounts (e.g., Stripe Test mode, Braintree Sandbox).
+
+## Simulating Failures with Decline Codes
+
+Pass `originalDeclineCode` values with a test gateway to test how the engine responds to specific decline scenarios.
+
+| Decline Code | Test Gateway Behaviour |
+|--------------|------------------------|
+| `do_not_honor` | Immediate retry — `200` with recovery result |
+| `insufficient_funds` | Queued — `202 Accepted` |
+| `expired_card` | Token refresh queued — `202 Accepted` |
+| `fraudulent` | Blocked — `403 Forbidden` |
+| `gateway_timeout` | Recovery retry — `200` |
+
+<Tip>
+  **Forcing a test failure:** Use an amount of exactly **44 cents** (`"amount": 44`). This only works with test gateways to simulate a gateway-level failure.
+</Tip>
+
+## End-to-End Testing with `simulateOutcome`
+
+The `simulateOutcome` parameter lets you test recovery logic, retry handlers, and webhook processing **without relying on test gateway limitations**.
+
+### How It Works
+
+<Steps>
+  <Step title="Set primary gateway to a Test Gateway">
+    Revtain Test Gateway, Stripe test keys, etc.
+  </Step>
+  <Step title="Send a recovery request with simulateOutcome">
+    Set to `success`, `failed`, or `blocked`.
+  </Step>
+  <Step title="Engine returns the simulated response">
+    The corresponding webhook fires automatically.
+  </Step>
+  <Step title="Simulated transactions are flagged">
+    Recorded with `isSimulated: true` for easy filtering.
+  </Step>
+</Steps>
+
+### Example Request
+
+```json
+{
+  "paymentMethodToken": "01KKZ10AD66A3VX260WKM0YFPG",
+  "amount": 5000,
+  "currency": "USD",
+  "originalDeclineCode": "do_not_honor",
+  "simulateOutcome": "failed"
+}
+```
+
+### Use Cases
+
+| Scenario | `simulateOutcome` | Response | Webhook Fired |
+|----------|-------------------|----------|---------------|
+| Test success path + webhook handler | `"success"` | `200 OK`, `success: true` | `recovery.success` |
+| Test failed recovery path | `"failed"` | `200 OK`, `success: false` | `recovery.failed` |
+| Test blocked transaction handler | `"blocked"` | `403 Forbidden` | `recovery.blocked` |
+
+<Note>
+  - `simulateOutcome` only works when your primary gateway is a Test Gateway
+  - In production, `simulateOutcome` is silently ignored
+  - All simulated transactions return `strategyUsed: "simulated"` for easy identification
+</Note>
