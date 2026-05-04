@@ -9,11 +9,6 @@
     "dark": "#FAFAFA"
   },
   "favicon": "/images/revtain-icon-black.png",
-  "logo": {
-    "light": "/images/revtain-icon-black.png",
-    "dark": "/images/revtain-icon-white.png",
-    "href": "/"
-  },
   "navigation": {
     "tabs": [
       {
