@@ -12,8 +12,8 @@ When `dunningEnabled` is set to `true`, Revtain sends a `recovery.failed` webhoo
 ## How It Works
 
 <Steps>
-  <Step title="Recovery engine exhausts all gateways">
-    Payment fails after primary + cascade attempts.
+  <Step title="Recovery engine exhausts available retry paths">
+    Payment fails after intelligent retries on the original gateway (and any cross-gateway routing available for the card).
   </Step>
   <Step title="Your system receives a recovery.failed webhook">
     Includes full transaction details, decline code, strategy used.

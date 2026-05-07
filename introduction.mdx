@@ -3,7 +3,7 @@ title: "Revtain API"
 description: "Recover failed payments. No checkout changes. Works with your existing payment stack."
 ---
 
-Revtain is a payment recovery engine. When a charge fails on your gateway, Revtain takes the same payment, intelligently routes it across a cascade of acquirers, and captures the revenue your gateway couldn't. Your checkout doesn't change. Your customers don't see anything different. You receive a webhook when the payment is recovered.
+Revtain is a payment recovery engine. When a charge fails on your gateway, Revtain runs intelligent retries with prediction-driven timing, prioritising recovery on the original gateway and routing to backup gateways for re-collected cards. Your checkout doesn't change. Your customers don't see anything different. You receive a webhook when the payment is recovered.
 
 These docs cover everything you need to integrate Revtain — whether you're using a supported billing platform (no code) or wiring it up to your own.
 
@@ -40,6 +40,13 @@ These docs cover everything you need to integrate Revtain — whether you're usi
     Common errors and how to fix them.
   </Card>
 </CardGroup>
+
+## Integration Tiers
+
+| Tier | What you get | What you do |
+|------|--------------|-------------|
+| **FAST_TRACK** | Same-gateway intelligent retries on Day 1. Cross-gateway recovery for customers whose cards have been re-collected through Revtain's hosted card update flow. | Send Revtain failed payment webhooks. Configure backup gateways during onboarding for the cross-gateway upgrade path. |
+| **ENGINE_ROOM** | Immediate cross-gateway recovery from the first transaction, no card update flow required. | One-time checkout integration via Revtain's secure card collection iFrame. |
 
 ## Base URL
 

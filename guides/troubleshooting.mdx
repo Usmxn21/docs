@@ -89,7 +89,7 @@ description: "Common errors and how to fix them."
 
 **Cause:** The gateway returned a 5xx error or timed out. The charge may or may not have gone through.
 
-**Fix:** Check your gateway dashboard to confirm. The Spreedly async webhook will eventually fire with the final state. **Do not retry on the same idempotency key** — you risk a double-charge.
+**Fix:** Check your gateway dashboard to confirm. The async outcome webhook will eventually fire with the final state. **Do not retry on the same idempotency key** — you risk a double-charge.
 
 ## Webhook Issues
 
