@@ -1,0 +1,192 @@
+---
+title: "ENGINE_ROOM iFrame Integration"
+description: "How to embed Revtain's secure card collection iFrame at your checkout for cross-gateway recovery from the first transaction."
+---
+
+The ENGINE_ROOM tier captures cards directly into Revtain's vault infrastructure at the moment of checkout. Once a card is vaulted, every subsequent recovery for that customer — across any gateway you have configured — runs against a portable token that doesn't depend on which gateway the original charge ran on.
+
+This guide shows your engineering team exactly how to embed the iFrame and tokenise cards securely.
+
+<Note>
+**Who this guide is for.** ENGINE_ROOM applies to **new customer signups** going forward — i.e. cards captured through this iFrame at checkout. For your existing customer base (already vaulted in your primary gateway), use the [API Integration](/guides/api-integration) or a [Connector](/guides/connectors) for the FAST_TRACK path. Most established merchants run both: ENGINE_ROOM for new signups, FAST_TRACK for the legacy book.
+</Note>
+
+## What You Receive at Onboarding
+
+In addition to your standard credentials (API Key + Webhook Signing Secret), ENGINE_ROOM clients receive:
+
+| Credential | Purpose |
+| :--- | :--- |
+| **Environment Key** | Identifies your sub-vault. Public — exposed to the browser. |
+| **iFrame Script URL** | Loads the Revtain iFrame component on your checkout page. |
+| **iFrame Init Endpoint** | Server-side endpoint that mints signed init parameters for each tokenisation session. |
+
+Your engineer needs all three to wire up the iFrame.
+
+## How It Works (3 Steps)
+
+<Steps>
+  <Step title="Server: mint signed init params">
+    Your server calls Revtain's iFrame init endpoint with your API Key. The response includes a one-time signed nonce that authorises a single tokenisation session. Pass the response down to your checkout page.
+  </Step>
+  <Step title="Browser: load and render the iFrame">
+    Your checkout page loads Revtain's iFrame script and initialises with the signed params. The iFrame renders a secure card form. Card data flows directly from the customer's browser into Revtain's vault — never through your servers.
+  </Step>
+  <Step title="Browser: receive the payment method token">
+    On successful tokenisation, the iFrame returns a `paymentMethodToken` to your page. Submit that token (not card details) to your server. Use it to charge the customer through your existing gateway, then pass it to Revtain on any future failed payment for cross-gateway recovery.
+  </Step>
+</Steps>
+
+## Server-Side: Mint Init Params
+
+```bash
+curl -X POST https://api.revtain.com/api/recovery/iframe-init \
+  -H "Content-Type: application/json" \
+  -H "X-API-KEY: rev_YOUR_API_KEY"
+```
+
+**Response:**
+
+```json
+{
+  "environmentKey": "PUBLIC_ENV_KEY_xxxxxxxxxxxxxxxxxxxx",
+  "nonce": "5c6e0e2a-2dfb-4f24-9b1c-5e8f6a23a118",
+  "timestamp": "1715255432",
+  "certificateToken": "CERT_xxxxxxxxxxxxxxxxxxxx",
+  "signature": "MEYCIQDxxxx...xxxxxxxxxxxxxx"
+}
+```
+
+<Warning>
+The `nonce` is single-use. Mint a new set of init params for every checkout session. Don't cache them client-side beyond the lifetime of one tokenisation attempt.
+</Warning>
+
+Pass these values to your checkout page however you mint other server data (initial page render, dedicated AJAX endpoint, etc.).
+
+## Browser: Embed the iFrame
+
+```html
+<!-- Add to your checkout page -->
+<div id="revtain-card-frame"></div>
+
+<script src="https://cdn.revtain.com/v1/revtain.js"></script>
+
+<script>
+  // Initialise with the signed params your server provided
+  Revtain.init({
+    environmentKey: serverParams.environmentKey,
+    nonce: serverParams.nonce,
+    timestamp: serverParams.timestamp,
+    certificateToken: serverParams.certificateToken,
+    signature: serverParams.signature,
+    container: '#revtain-card-frame',
+    fields: {
+      number: { placeholder: 'Card number' },
+      expiry: { placeholder: 'MM / YY' },
+      cvv:    { placeholder: 'CVC' }
+    },
+    style: {
+      // Inherit your brand colours
+      base: {
+        fontFamily: 'inherit',
+        fontSize: '16px',
+        color: '#0a0a0a'
+      }
+    }
+  });
+
+  // Listen for tokenisation
+  Revtain.on('tokenized', (event) => {
+    // event.paymentMethodToken — submit this to your server
+    document.querySelector('#paymentMethodToken').value = event.paymentMethodToken;
+    document.querySelector('#checkoutForm').submit();
+  });
+
+  Revtain.on('error', (err) => {
+    // Handle validation errors / declined card / network failures
+    console.error('Tokenisation failed:', err);
+  });
+</script>
+```
+
+## Tokenise the Card
+
+When the customer submits the form, call the tokenisation method:
+
+```javascript
+// Triggered by your "Pay" button
+document.querySelector('#payButton').addEventListener('click', () => {
+  Revtain.tokenize();
+});
+```
+
+The iFrame validates the card client-side (Luhn check, expiry validity, CVV format), submits to Revtain's vault, and fires the `tokenized` event with the resulting `paymentMethodToken`.
+
+## What Comes Back
+
+```json
+{
+  "paymentMethodToken": "pm_revtain_xxxxxxxxxxxxxxxxxxxx",
+  "binPrefix": "411111",
+  "cardBrand": "visa",
+  "lastFour": "1234",
+  "expiryMonth": "12",
+  "expiryYear": "2027"
+}
+```
+
+You receive metadata you can display to the customer (last four, brand) and the **payment method token** that represents this card across every gateway you configure with Revtain.
+
+## Charge the Card
+
+Use the token directly in a recovery call when a charge fails — no separate "store this card" step is needed:
+
+```bash
+curl -X POST https://api.revtain.com/api/recovery/execute \
+  -H "Content-Type: application/json" \
+  -H "X-API-KEY: rev_YOUR_API_KEY" \
+  -d '{
+    "paymentMethodToken": "pm_revtain_xxxxxxxxxxxxxxxxxxxx",
+    "amount": 4999,
+    "currency": "USD",
+    "originalDeclineCode": "do_not_honor",
+    "idempotencyKey": "order_12345_retry_1"
+  }'
+```
+
+Because the token is a universal vault token (not a gateway-locked one), Revtain can cascade across every gateway you have configured if the primary declines.
+
+## PCI Scope
+
+The iFrame is hosted on Revtain's vault infrastructure, not yours. Card data flows directly from the customer's browser into the vault — your servers never see PAN, CVV, or magnetic stripe data. Your application's PCI scope stays at SAQ A. See [Security](/concepts/security) for full detail.
+
+## Testing
+
+Use a test gateway during onboarding. Revtain accepts the standard Visa / Mastercard test card numbers documented at [docs.revtain.com/guides/testing](/guides/testing). The `tokenized` event fires identically in test mode; switching to live mode is a credentials change, not a code change.
+
+## Common Pitfalls
+
+<AccordionGroup>
+  <Accordion title="iFrame fails to render with 'Invalid signature'">
+    The signed params are time-bounded. If the gap between minting them on your server and using them in the browser exceeds a few minutes (typically because the page sat idle), the signature expires. Mint fresh params on page load or on customer focus, not at server startup.
+  </Accordion>
+  <Accordion title="`Revtain.tokenize()` returns no token">
+    Check that the `tokenized` and `error` event listeners are both registered before calling `tokenize()`. If `error` is unregistered, validation failures fail silently.
+  </Accordion>
+  <Accordion title="Token works in test but not live">
+    The environment key is environment-specific. Make sure your server is using the live `rev_live_xxx` API key when minting init params, and your iFrame script URL is the production CDN (`cdn.revtain.com/v1/`, not a sandbox URL).
+  </Accordion>
+  <Accordion title="Cross-gateway cascade isn't happening">
+    Confirm you have backup gateways configured in your Revtain account. ENGINE_ROOM tokens are universal, but the cascade only routes to gateways you've explicitly connected. The admin team can confirm what's configured.
+  </Accordion>
+</AccordionGroup>
+
+## What Happens Next
+
+Once your iFrame is live and a customer's card is vaulted:
+
+1. The customer's first charge succeeds via your existing gateway flow (you charge the card using `paymentMethodToken`)
+2. Future renewal failures trigger Revtain's recovery engine — see [API Integration](/guides/api-integration) for the recovery webhook and outcome webhook contract
+3. Recovery cascades across every gateway you have configured, returning a `recovery.success` or `recovery.failed` webhook to your endpoint
+
+For your existing customer base (signed up before integration), use [Connectors](/guides/connectors) or the [API Integration](/guides/api-integration) — those paths run FAST_TRACK against your prior-gateway tokens without requiring a re-vault.

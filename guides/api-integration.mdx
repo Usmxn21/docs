@@ -3,11 +3,15 @@ title: "API Integration"
 description: "Custom billing system or full API control. Recommended Fast Track flow with code examples."
 ---
 
-This guide shows the recommended **Fast Track** flow: your checkout stays exactly as it is, and Revtain handles recovery when payments fail.
+This guide shows the **FAST_TRACK** API flow: your checkout stays exactly as it is, and Revtain handles recovery when payments fail. Best fit for established subscription businesses with existing customers already vaulted in their primary gateway.
 
 <Info>
-  **Your checkout doesn't change.** Customers continue to pay with Stripe, Apple Pay, Google Pay — whatever you already support. Revtain operates entirely behind the scenes. No iFrame, no UI changes, nothing customer-facing.
+  **Your checkout doesn't change.** Customers continue to pay with Stripe, Apple Pay, Google Pay — whatever you already support. Revtain operates entirely behind the scenes on failed payments. No iFrame, no UI changes, nothing customer-facing.
 </Info>
+
+<Note>
+  **Launching a greenfield product or new product line?** The [ENGINE_ROOM iFrame Integration](/guides/iframe-integration) is the better fit — captures cards directly into Revtain's vault at checkout, unlocking cross-gateway recovery from the first transaction. Most established merchants combine both: ENGINE_ROOM for new signups going forward, FAST_TRACK (this guide) for the existing customer base.
+</Note>
 
 ## How It Works
 

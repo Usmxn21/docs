@@ -43,10 +43,12 @@ These docs cover everything you need to integrate Revtain — whether you're usi
 
 ## Integration Tiers
 
-| Tier | What you get | What you do |
-|------|--------------|-------------|
-| **FAST_TRACK** | Same-gateway intelligent retries on Day 1. Cross-gateway recovery for customers whose cards have been re-collected through Revtain's hosted card update flow. | Send Revtain failed payment webhooks. Configure backup gateways during onboarding for the cross-gateway upgrade path. |
-| **ENGINE_ROOM** | Immediate cross-gateway recovery from the first transaction, no card update flow required. | One-time checkout integration via Revtain's secure card collection iFrame. |
+Revtain has two integration tiers. Most established subscription businesses use FAST_TRACK; greenfield deployments and new product lines use ENGINE_ROOM. The two are often combined — ENGINE_ROOM for new customer signups going forward, FAST_TRACK for the existing customer base.
+
+| Tier | Best for | What you get | What you do |
+|------|----------|--------------|-------------|
+| **FAST_TRACK** | Established subscription businesses with existing customers vaulted in their primary gateway | Same-gateway intelligent retries on Day 1 across the entire customer base. Cross-gateway recovery emerges progressively as customers re-collect cards through Revtain's hosted card update flow. | Send Revtain failed payment webhooks. Optionally configure backup gateways during onboarding for the cross-gateway upgrade path. |
+| **ENGINE_ROOM** | Greenfield deployments, new product lines, customer bases captured going forward | Cross-gateway recovery from the first transaction for customers captured via Revtain's secure card collection iFrame. Applies to new signups post-integration; pre-existing cards in the merchant's prior gateway remain on FAST_TRACK paths. | One-time checkout integration via Revtain's iFrame. See the [ENGINE_ROOM iFrame Integration](/guides/iframe-integration) guide. |
 
 ## Base URL
 
