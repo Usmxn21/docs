@@ -65,7 +65,7 @@ components:
       properties:
         paymentMethodToken:
           type: string
-          description: "Your gateway's payment token (e.g., Stripe `pm_xxx`, `tok_xxx`, or a Revtain vault token)."
+          description: "Your gateway's payment token (e.g., Stripe `pm_xxx`, `tok_xxx`, Checkout.com `src_xxx`). Apple Pay and Google Pay tokens issued by your gateway work the same way as card tokens."
           example: pm_1234567890
         amount:
           type: integer
@@ -260,52 +260,6 @@ components:
           type: string
           example: da646dba-ce56-4483-ad0a-2a4fac54a5e2
 
-    TokenizeRequest:
-      type: object
-      required:
-        - paymentMethod
-      properties:
-        paymentMethod:
-          type: object
-          required:
-            - credit_card
-          properties:
-            credit_card:
-              type: object
-              required:
-                - number
-                - month
-                - year
-              properties:
-                number:
-                  type: string
-                  example: "4111111111111111"
-                month:
-                  type: integer
-                  example: 12
-                year:
-                  type: integer
-                  example: 2028
-                verification_value:
-                  type: string
-                  example: "123"
-                first_name:
-                  type: string
-                  example: John
-                last_name:
-                  type: string
-                  example: Doe
-
-    TokenizeResponse:
-      type: object
-      properties:
-        success:
-          type: boolean
-          example: true
-        token:
-          type: string
-          example: 01KKZ10AD66A3VX260WKM0YFPG
-
     RecoveryStatusResponse:
       type: object
       properties:
@@ -363,7 +317,7 @@ components:
       properties:
         paymentMethodToken:
           type: string
-          description: Your gateway's payment token or Revtain vault token.
+          description: "Your gateway's payment token (e.g., Stripe `pm_xxx`)."
           example: 01KKZ10AD66A3VX260WKM0YFPG
         amount:
           type: integer
@@ -688,62 +642,6 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/UnauthorizedError"
-
-  /api/recovery/tokenize:
-    post:
-      tags:
-        - Recovery Engine
-      summary: Tokenize Card
-      description: |
-        Server-to-server card tokenization for ENGINE_ROOM clients with their own PCI Level 1 clearance.
-
-        FAST_TRACK clients do not need this endpoint — you already have tokens from your payment gateway.
-
-        > **PCI Requirement:** This endpoint accepts raw card data (PAN, CVV, expiry). Your servers must be PCI DSS Level 1 compliant to use it. Contact Revtain to enable `tokenizeEnabled` on your account.
-
-        **Rate limit:** 10 requests per minute per API key.
-      operationId: tokenizeCard
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/TokenizeRequest"
-            example:
-              paymentMethod:
-                credit_card:
-                  number: "4111111111111111"
-                  month: 12
-                  year: 2028
-                  verification_value: "123"
-                  first_name: John
-                  last_name: Doe
-      responses:
-        "200":
-          description: Card tokenized successfully
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/TokenizeResponse"
-              example:
-                success: true
-                token: 01KKZ10AD66A3VX260WKM0YFPG
-        "401":
-          description: Unauthorized
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/UnauthorizedError"
-        "403":
-          description: Tokenization not enabled on your account
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  error:
-                    type: string
-                    example: Tokenization is not enabled for this account. Contact Revtain to enable.
 
   /api/recovery/status/{transactionId}:
     get:

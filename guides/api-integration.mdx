@@ -184,5 +184,46 @@ async function handlePaymentFailure(payment) {
 The only requirement is that you have the customer's payment token from your gateway. Everything else is the same regardless of billing platform.
 
 <Tip>
+  **Apple Pay / Google Pay customers.** Any gateway-native token works — including the `pm_xxx` tokens Stripe issues for Apple Pay and Google Pay charges. You don't pass anything different; Revtain retries them on the same gateway the same way as a card token.
+</Tip>
+
+## Optional: Pre-Screening Risky Payments
+
+Before charging a payment, you can ask Revtain to score the risk of failure. This is most useful for high-value or first-time-in-a-billing-cycle charges where a wasted attempt can hurt your merchant standing.
+
+```bash
+curl -X POST https://api.revtain.com/api/predict/risk \
+  -H "Content-Type: application/json" \
+  -H "X-API-KEY: rev_YOUR_API_KEY" \
+  -d '{
+    "paymentMethodToken": "pm_1234567890",
+    "amount": 5000,
+    "currency": "USD"
+  }'
+```
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "prediction": {
+    "riskScore": 72.5,
+    "recommendation": "delay",
+    "reasoning": "Card has 3 prior declines in last 30 days. Amount matches a historically recoverable pattern."
+  }
+}
+```
+
+| `recommendation` | What to do |
+|------------------|-----------|
+| `proceed` | Charge normally |
+| `proceed_with_caution` | Charge but monitor for failure |
+| `delay` | Hold the charge for a Revtain-recommended retry window |
+| `block` | Do not charge — high chance of decline or chargeback |
+
+You can also subscribe to the `predict.risk.high` webhook to receive automatic alerts for customers whose stored payment method has crossed a risk threshold. See [Webhooks → predict.risk.high](/guides/webhooks#predict-risk-high).
+
+<Tip>
   **Need help?** Contact the Revtain team at [support@revtain.com](mailto:support@revtain.com) for guidance on integrating with your specific billing platform.
 </Tip>

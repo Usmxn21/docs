@@ -115,6 +115,14 @@ description: "Common errors and how to fix them."
 
 ---
 
+### Recovery failed but I never got a `recovery.failed` webhook
+
+**Cause:** Your account is configured with `dunningEnabled: false`. With dunning disabled, Revtain fires `recovery.success` and `recovery.blocked` webhooks, but does **not** fire `recovery.failed` — the assumption is that you're handling failure detection on your own side.
+
+**Fix:** Either re-enable `dunningEnabled` so failure webhooks fire, or look up the outcome yourself via [`GET /api/recovery/status/:id`](/api-reference/endpoint/get-recovery-status) using the `transactionId` returned from `/api/recovery/execute`. To change the setting, contact your Revtain account manager.
+
+---
+
 ### Webhook arrives but content seems stale
 
 **Cause:** You may be reading from a cached version, or the event was retried after a delay.
