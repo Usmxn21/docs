@@ -117,11 +117,11 @@ Sent when a previously failed payment has been successfully recovered.
 {
   "event": "recovery.success",
   "revtainTransactionId": "da646dba-ce56-4483-ad0a-2a4fac54a5e2",
-  "gatewayTransactionToken": "O52A2R2QoQeB2L9i3QG4yBf9pQ8",
+  "gatewayTransactionToken": "pi_3OZQ8K2eZvKYlo2C1abc1234",
   "amount": 5000,
   "currency": "USD",
   "message": "Succeeded!",
-  "strategyUsed": "backup1"
+  "strategyUsed": "primary"
 }
 ```
 
@@ -158,7 +158,7 @@ Sent when the Risk Engine blocks a transaction (fraud, lost card, etc.).
   "event": "recovery.blocked",
   "declineCode": "fraudulent",
   "reason": "Transaction blocked by Revtain Risk Engine to protect Merchant Health.",
-  "paymentMethodToken": "01KKZ10AD66A3VX260WKM0YFPG",
+  "paymentMethodToken": "pm_1234567890",
   "amount": 5000,
   "currency": "USD",
   "timestamp": "2026-03-17T23:15:21.000Z"
@@ -200,7 +200,7 @@ Sent when the pre-failure risk prediction engine detects a high-risk payment **b
 ```json
 {
   "event": "predict.risk.high",
-  "paymentMethodToken": "01KKZ10AD66A3VX260WKM0YFPG",
+  "paymentMethodToken": "pm_1234567890",
   "riskScore": 82.5,
   "reasoning": "Card has 3 prior declines in last 30 days. High-risk pattern detected.",
   "amount": 5000,

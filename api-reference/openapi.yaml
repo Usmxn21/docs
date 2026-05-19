@@ -6,7 +6,7 @@ info:
 
     ## Choose Your Path
 
-    **Using Chargebee, Recurly, Stripe Billing, or Braintree?**
+    **Using Chargebee, Recurly, Stripe Billing, Braintree, or Shopify (ReCharge)?**
     Use a Connector — paste one webhook URL, no code, 5 minutes.
 
     **Custom billing system or want full API control?**
@@ -126,7 +126,7 @@ components:
           example: primary
         gatewaysAttempted:
           type: integer
-          example: 2
+          example: 1
         recoveryEngineApplied:
           type: boolean
           example: true
@@ -166,7 +166,7 @@ components:
           example: all_failed
         gatewaysAttempted:
           type: integer
-          example: 3
+          example: 1
         recoveryEngineApplied:
           type: boolean
           example: true
@@ -292,7 +292,7 @@ components:
         paymentMethodToken:
           type: string
           description: The token for the card that needs updating.
-          example: 01KKZ10AD66A3VX260WKM0YFPG
+          example: pm_1234567890
 
     CardUpdateResponse:
       type: object
@@ -318,7 +318,7 @@ components:
         paymentMethodToken:
           type: string
           description: "Your gateway's payment token (e.g., Stripe `pm_xxx`)."
-          example: 01KKZ10AD66A3VX260WKM0YFPG
+          example: pm_1234567890
         amount:
           type: integer
           description: Amount in cents.
@@ -370,7 +370,7 @@ components:
         paymentMethodToken:
           type: string
           description: The same token used in the `/predict/risk` call.
-          example: 01KKZ10AD66A3VX260WKM0YFPG
+          example: pm_1234567890
         actualOutcome:
           type: string
           enum: [succeeded, failed, blocked]
@@ -531,7 +531,7 @@ paths:
                     error: null
                     transactionId: 01KKZ14FEZK152ZBXEM2XK1B0C
                     strategyUsed: primary
-                    gatewaysAttempted: 2
+                    gatewaysAttempted: 1
                     recoveryEngineApplied: true
                     ai:
                       score: 72.5
@@ -546,7 +546,7 @@ paths:
                     error: "Purchase request failed: Card declined"
                     transactionId: FAILED_API_1773792234011
                     strategyUsed: all_failed
-                    gatewaysAttempted: 3
+                    gatewaysAttempted: 1
                     recoveryEngineApplied: true
                     ai:
                       score: 35.2
@@ -711,7 +711,7 @@ paths:
             schema:
               $ref: "#/components/schemas/CardUpdateRequest"
             example:
-              paymentMethodToken: 01KKZ10AD66A3VX260WKM0YFPG
+              paymentMethodToken: pm_1234567890
       responses:
         "201":
           description: Card update link created
