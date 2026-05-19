@@ -23,8 +23,8 @@ When passing `originalDeclineCode`, the recovery engine automatically determines
 Different declines need different strategies:
 
 - **`insufficient_funds`** → Retry on payday, end of month, or after a known billing cycle
-- **`do_not_honor`** → Retry through a backup gateway with different MID
-- **`expired_card`** → Refresh token via account updater first
+- **`do_not_honor`** → Retry with optimised timing and issuer-trust signals
+- **`expired_card`** → Skip the retry, refresh the token via the account updater, and prompt the customer to update their card
 - **`fraudulent`** → Block immediately — retrying causes chargebacks and damages merchant health
 
 The Revtain engine encodes these patterns based on industry-wide observation. By passing the decline code, you let the engine pick the right path automatically.

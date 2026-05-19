@@ -7,7 +7,7 @@ description: "Everything your team needs to do before going live with Revtain."
 
 - [ ] Receive your **API Key** (`rev_xxx`) and **Webhook Signing Secret** (`whsec_xxx`) from Revtain onboarding
 - [ ] Store both credentials securely in environment variables — never in client-side code or repositories
-- [ ] Decide your integration path: **Connector** (Chargebee/Recurly/Stripe Billing/Braintree — no code) or **API** (custom)
+- [ ] Decide your integration path: **Connector** (Chargebee/Recurly/Stripe Billing/Braintree/Shopify-ReCharge — no code) or **API** (custom)
 
 ## For Connector Integrations (No Code)
 
@@ -30,7 +30,7 @@ description: "Everything your team needs to do before going live with Revtain."
 ## Testing
 
 - [ ] Onboard with a **test gateway** (Revtain Test Gateway or Stripe test key)
-- [ ] Send a recovery request with `simulateOutcome: "success"` — verify your webhook handler receives `recovery.success`
+- [ ] Send a recovery request with `simulateOutcome: "success"` in the request body — verify your webhook handler receives `recovery.success` (see [Testing guide](/guides/testing) for all `simulateOutcome` values and behaviour)
 - [ ] Send `simulateOutcome: "failed"` — verify your handler receives `recovery.failed`
 - [ ] Send `simulateOutcome: "blocked"` — verify your handler receives `recovery.blocked`
 - [ ] Test idempotency: same `idempotencyKey` twice — verify `409 Conflict`
@@ -39,7 +39,6 @@ description: "Everything your team needs to do before going live with Revtain."
 ## Going Live
 
 - [ ] Re-onboard with your **live gateway key** (e.g., Stripe `sk_live_xxx`)
-- [ ] Optionally: add a backup gateway to unlock cross-gateway recovery for re-collected cards
 - [ ] Verify your webhook endpoint is HTTPS and publicly accessible
 - [ ] Send a real failed payment and confirm end-to-end recovery
 - [ ] Confirm `recovery.success` webhook updates your billing system correctly
@@ -48,5 +47,5 @@ description: "Everything your team needs to do before going live with Revtain."
 
 - [ ] Set `billingCycleDay` and `timezone` for optimised retry timing
 - [ ] Enable `dunningEnabled` for automated dunning sequences
-- [ ] Configure `cardUpdateDomain` (CNAME to `api.revtain.com`) for branded card update pages
+- [ ] Set up a custom domain for branded card update pages — add a CNAME DNS record pointing `pay.yourdomain.com` to `api.revtain.com`, then tell your Revtain account manager. See [Card Update Links](/guides/card-update-links#custom-domain-setup).
 - [ ] Call `POST /api/predict/risk` before billing to proactively identify at-risk payments

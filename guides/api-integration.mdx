@@ -1,17 +1,13 @@
 ---
 title: "API Integration"
-description: "Custom billing system or full API control. Recommended Fast Track flow with code examples."
+description: "Custom billing system or full API control. Pass us the gateway token on failure and we run the retry."
 ---
 
-This guide shows the **FAST_TRACK** API flow: your checkout stays exactly as it is, and Revtain handles recovery when payments fail. Best fit for established subscription businesses with existing customers already vaulted in their primary gateway.
+This guide shows the recommended flow: your checkout stays exactly as it is, and Revtain handles recovery when payments fail.
 
 <Info>
-  **Your checkout doesn't change.** Customers continue to pay with Stripe, Apple Pay, Google Pay — whatever you already support. Revtain operates entirely behind the scenes on failed payments. No iFrame, no UI changes, nothing customer-facing.
+  **Your checkout doesn't change.** Customers continue to pay with whatever you already support. Revtain operates entirely behind the scenes — no UI changes, nothing customer-facing.
 </Info>
-
-<Note>
-  **Launching a greenfield product or new product line?** The [ENGINE_ROOM iFrame Integration](/guides/iframe-integration) is the better fit — captures cards directly into Revtain's vault at checkout, unlocking cross-gateway recovery from the first transaction. Most established merchants combine both: ENGINE_ROOM for new signups going forward, FAST_TRACK (this guide) for the existing customer base.
-</Note>
 
 ## How It Works
 
@@ -26,7 +22,7 @@ This guide shows the **FAST_TRACK** API flow: your checkout stays exactly as it 
     Pass the gateway token, amount, and decline code.
   </Step>
   <Step title="Revtain runs the engine">
-    Intelligent retries with prediction-driven timing on the original gateway. Re-collected cards unlock cross-gateway recovery.
+    Intelligent retries with prediction-driven timing directly against the gateway that issued the original token.
   </Step>
   <Step title="You receive a webhook with the result">
     `recovery.success`, `recovery.failed`, or `recovery.blocked`.

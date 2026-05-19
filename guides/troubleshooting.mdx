@@ -31,7 +31,7 @@ description: "Common errors and how to fix them."
 }
 ```
 
-**Cause:** You exceeded 60 recovery requests per minute (or 10/min on `/tokenize`).
+**Cause:** You exceeded 60 recovery requests per minute.
 
 **Fix:** Implement exponential backoff using the `retryAfter` value. If you're consistently hitting this, contact [support@revtain.com](mailto:support@revtain.com) — we can raise limits for legitimate workloads.
 
@@ -138,12 +138,13 @@ description: "Common errors and how to fix them."
 
 ### Invoice not marked as paid after success
 
-**Cause:** Revtain recovered the charge on a backup gateway, but the invoice on your billing platform is tracked against the primary gateway.
+**Cause:** The recovery succeeded on the gateway but the connector couldn't update the billing platform invoice afterwards.
 
 **Fix:**
-- For **Chargebee** and **Recurly**, this is automatic via API.
-- For **Stripe Billing**, the invoice is paid via Stripe's `pay_invoice` API — check the invoice timeline in the Stripe Dashboard for confirmation.
+- For **Chargebee** and **Recurly**, this happens via API automatically — confirm your platform API key has write permissions on invoices.
+- For **Stripe Billing**, the invoice is paid via Stripe's `pay_invoice` API — check the invoice timeline in the Stripe Dashboard.
 - For **Braintree**, the subscription auto-detects the recovered payment.
+- For **Shopify (ReCharge)**, the charge is captured via the ReCharge API — confirm your ReCharge access token has charge-capture scope.
 
 If you still see issues, check that the connector has write permissions on invoices/transactions.
 

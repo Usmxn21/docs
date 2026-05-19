@@ -28,9 +28,8 @@ During onboarding, you receive two credentials:
 
 ## What You Provide
 
-- Your **payment gateway key** (Stripe secret key, Braintree credentials, etc.)
+- Your **payment gateway key** (Stripe secret key, Checkout.com secret key, etc.)
 - A **webhook URL** (HTTPS endpoint to receive recovery notifications)
-- Optionally, up to **2 backup gateways** to unlock cross-gateway recovery for re-collected cards
 
 ## Optional Configuration
 
@@ -38,7 +37,7 @@ During onboarding, you receive two credentials:
 |-------|------|---------|-------------|
 | `billingCycleDay` | integer (1-31) | Friday payday window | Day of month customers are billed. Optimises retry timing. |
 | `timezone` | string | `UTC` | IANA timezone (e.g., `America/New_York`). |
-| `dunningEnabled` | boolean | `false` | Enable automated dunning webhook sequences on failure. |
+| `dunningEnabled` | boolean | `true` | When `true`, Revtain sends a `recovery.failed` webhook to your endpoint after all retry strategies are exhausted. When `false`, no webhook is fired on failure — only `recovery.success` and `recovery.blocked` fire. Keep this `true` unless you are handling failure detection entirely on your own side. |
 | `cardUpdateDomain` | string | — | Custom domain for branded card update page (e.g., `pay.yourdomain.com`). |
 
 ## Rate Limits
@@ -46,7 +45,6 @@ During onboarding, you receive two credentials:
 | Endpoint | Limit |
 |----------|-------|
 | `/api/recovery/execute` | 60 requests / minute / API key |
-| `/api/recovery/tokenize` | 10 requests / minute / API key |
 | All others | No specific limit (fair-use applies) |
 
 Rate-limited requests return `429 Too Many Requests` with a `retryAfter` field.

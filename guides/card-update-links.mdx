@@ -11,7 +11,7 @@ Generate a secure, time-limited URL that your customer can visit to update their
 curl -X POST https://api.revtain.com/api/recovery/update-card/generate \
   -H "Content-Type: application/json" \
   -H "X-API-KEY: rev_YOUR_API_KEY" \
-  -d '{"paymentMethodToken": "01KKZ10AD66A3VX260WKM0YFPG"}'
+  -d '{"paymentMethodToken": "pm_1234567890"}'
 ```
 
 **Response (`201 Created`):**
@@ -26,26 +26,68 @@ curl -X POST https://api.revtain.com/api/recovery/update-card/generate \
 
 The URL is valid for **72 hours** and can only be used once. Send it to your customer via email, SMS, or in-app messaging.
 
-When the customer updates their card, you'll receive a [`card.updated`](/guides/webhooks#card-updated) webhook with the old and new payment method tokens.
+When the customer updates their card, you'll receive a [`card.updated`](/guides/webhooks#card-updated) webhook with the old and new payment method tokens. The new token is a gateway-native token (e.g. a Stripe `pm_xxx`) — store it against the customer record and use it as the `paymentMethodToken` on future `/api/recovery/execute` calls for that customer.
 
 ## Custom Domain Setup
 
-By default, the card update URL uses the Revtain API domain. For a seamless customer experience, configure a custom domain so your customers see your own URL (e.g., `pay.yourdomain.com`).
+By default, card update URLs use the Revtain domain — which means your customer sees `api.revtain.com` in the browser. That looks unfamiliar and can reduce trust. **Set up a custom domain before going live.**
 
 <Steps>
+  <Step title="Choose a subdomain">
+    Pick something recognisable: `pay.yourdomain.com` or `billing.yourdomain.com`.
+  </Step>
   <Step title="Add a CNAME DNS record">
-    `pay.yourdomain.com` → `api.revtain.com`
+    Point your chosen subdomain at Revtain: `pay.yourdomain.com` → `api.revtain.com`
   </Step>
-  <Step title="Ensure SSL is active">
-    Automatic if you use Cloudflare or similar.
+  <Step title="Enable SSL">
+    If you use Cloudflare, SSL is automatic. Otherwise ensure your DNS provider issues a certificate for the subdomain.
   </Step>
-  <Step title="Set cardUpdateDomain">
-    During onboarding or via the admin API: `cardUpdateDomain: "pay.yourdomain.com"`
+  <Step title="Tell Revtain your domain">
+    Share your subdomain with your Revtain account manager during onboarding. We configure it on our end — no further action needed from you.
   </Step>
 </Steps>
 
-The hosted page displays your business name, a secure card entry form, and a confirmation message — **no third-party branding visible to your customer**.
+Once configured, every card update link generated for your account will use your domain automatically:
 
-<Tip>
-  **Recommended:** Set up a custom domain before sending card update links to customers. They're more likely to trust and complete a card update on a URL they recognise.
-</Tip>
+```
+https://pay.yourdomain.com/api/recovery/update-card/abc123xyz...
+```
+
+Your customer sees your domain, your logo, and your brand colour. Revtain is not visible at any point.
+
+## Branding the Card Update Page
+
+The card update page your customers see is white-labelled to your business. To make it look right, tell Revtain your brand details during onboarding:
+
+| Field | What it controls | Example |
+|-------|-----------------|---------|
+| `brandName` | Heading and page title seen by your customer | `"Acme Inc"` |
+| `brandLogoUrl` | Your logo, displayed at the top of the page | `"https://yourdomain.com/logo.png"` |
+| `brandPrimaryColor` | Button and accent colour | `"#6366f1"` |
+
+If `brandName` is not set, Revtain falls back to your registered business name. If no logo is provided, a lock icon is shown instead.
+
+**What your customer sees:**
+
+```
+┌─────────────────────────────────┐
+│  [Your Logo]                    │
+│  Acme Inc                       │  ← your brandName
+│  Secure Payment Update          │
+├─────────────────────────────────┤
+│  Your payment method on file    │
+│  with Acme Inc needs to be      │
+│  updated. Please enter your     │
+│  new card details below.        │
+│                                 │
+│  Card Number ________________   │
+│  Expiry _______  CVV ________   │
+│                                 │
+│  [   Update Card   ]            │  ← your brandPrimaryColor
+└─────────────────────────────────┘
+  Your card details are processed
+  securely and never stored on
+  this server.
+```
+
+No mention of Revtain or any third party is visible to your customer at any point. To update your brand settings after onboarding, contact your Revtain account manager.

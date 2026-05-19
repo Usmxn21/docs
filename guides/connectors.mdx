@@ -1,9 +1,9 @@
 ---
 title: "Zero-Code Connectors"
-description: "Native integrations for Chargebee, Recurly, Stripe Billing, and Braintree. No code required."
+description: "Native integrations for Chargebee, Recurly, Stripe Billing, Braintree, and Shopify (ReCharge). No code required."
 ---
 
-For Chargebee, Recurly, Stripe Billing, and Braintree Subscriptions, Revtain provides direct connectors that require **no code on your side**. Paste a single webhook URL into your billing platform settings — Revtain handles everything.
+For Chargebee, Recurly, Stripe Billing, Braintree Subscriptions, and Shopify subscriptions via ReCharge, Revtain provides direct connectors that require **no code on your side**. Paste a single webhook URL into your billing platform settings — Revtain handles everything.
 
 ## How Connectors Work
 
@@ -30,10 +30,11 @@ For Chargebee, Recurly, Stripe Billing, and Braintree Subscriptions, Revtain pro
 
 | Platform | Webhook URL Pattern | Event Handled |
 |----------|---------------------|---------------|
-| **Chargebee** | `https://api.revtain.com/api/connectors/chargebee/webhook/{clientId}` | `payment_failed` |
-| **Recurly** | `https://api.revtain.com/api/connectors/recurly/webhook/{clientId}` | `failed_payment` |
-| **Stripe Billing** | `https://api.revtain.com/api/connectors/stripe-billing/webhook/{clientId}` | `invoice.payment_failed` |
+| **Chargebee** | `https://api.revtain.com/api/connectors/chargebee/webhook/{clientId}` | `payment_failed`, `payment_source_updated` |
+| **Recurly** | `https://api.revtain.com/api/connectors/recurly/webhook/{clientId}` | `failed_payment`, `billing_info_updated_notification` |
+| **Stripe Billing** | `https://api.revtain.com/api/connectors/stripe-billing/webhook/{clientId}` | `invoice.payment_failed`, `payment_method.attached`, `payment_intent.succeeded` |
 | **Braintree Subscriptions** | `https://api.revtain.com/api/connectors/braintree/webhook/{clientId}` | `subscription_went_past_due` |
+| **Shopify (ReCharge)** | `https://api.revtain.com/api/connectors/shopify-recharge/webhook/{clientId}` | `charge/failed`, `subscription/payment_failure_count_exceeded` |
 
 ## Setup Instructions
 
@@ -89,7 +90,33 @@ For Chargebee, Recurly, Stripe Billing, and Braintree Subscriptions, Revtain pro
     - Runs the recovery engine with the processor response code
     - On success, Braintree detects the payment and updates the subscription status
   </Accordion>
+
+  <Accordion title="Shopify (ReCharge)" icon="shop">
+    For Shopify stores running subscriptions through ReCharge.
+
+    1. During Revtain onboarding, select **Shopify (ReCharge)** as your billing platform
+    2. Enter your ReCharge API access token and webhook signing secret
+    3. In ReCharge, go to **Settings → Notifications → Webhooks**
+    4. Add a new webhook endpoint using the URL from your credentials modal
+    5. Select the `charge/failed` topic (and optionally `subscription/payment_failure_count_exceeded`)
+
+    **What Revtain does automatically:**
+    - Verifies the `X-Recharge-Hmac-Sha256` signature on every webhook
+    - Extracts the customer's Stripe payment method from the charge payload
+    - Runs the recovery engine with the failed charge amount and currency
+    - On success, captures the charge in ReCharge so the subscription stays active
+  </Accordion>
 </AccordionGroup>
+
+## Multi-Gateway Recovery for Connector Clients
+
+If you have more than one gateway configured in your billing platform, Revtain's connectors put that to work. Every recovery that doesn't succeed through your primary processing path gets a second attempt through your platform's own routing — using whatever alternative gateways or merchant accounts you have wired in.
+
+For multi-gateway clients on Chargebee and Recurly, this means a decline that can't be resolved on the primary processing path gets one more attempt through a secondary path before the recovery is marked as failed. No additional setup on your side — if a second gateway is configured in your billing platform, the escalation runs automatically as part of every connector-handled recovery.
+
+<Tip>
+  This is a connector-only benefit. API-integrated clients control their own escalation path — Revtain returns the result of the retry and you decide whether to route the failed invoice elsewhere.
+</Tip>
 
 ## Connector vs. API Integration
 
@@ -98,7 +125,7 @@ For Chargebee, Recurly, Stripe Billing, and Braintree Subscriptions, Revtain pro
 | **Code required** | None — paste one URL | Webhook handler + API calls |
 | **Setup time** | 5 minutes | 30-60 minutes |
 | **Invoice reconciliation** | Automatic | Manual (in your webhook handler) |
-| **Available for** | Chargebee, Recurly, Stripe Billing, Braintree | Any billing system |
+| **Available for** | Chargebee, Recurly, Stripe Billing, Braintree, Shopify (ReCharge) | Any billing system |
 | **Customisation** | Standard recovery flow | Full control |
 
 <Note>

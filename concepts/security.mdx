@@ -1,6 +1,6 @@
 ---
 title: "Security & Compliance"
-description: "Encryption, PCI compliance, signing, and how Revtain handles card data."
+description: "Encryption, PCI scope, signing, and how Revtain handles payment data."
 ---
 
 ## Security Layers
@@ -11,25 +11,17 @@ description: "Encryption, PCI compliance, signing, and how Revtain handles card 
 | **Transport** | TLS 1.2+ | All API traffic encrypted in transit |
 | **API Keys** | Cryptographic Random | 24-byte keys with `rev_` prefix (base64url encoded) |
 | **Webhook Signatures** | HMAC-SHA256 | Every outbound webhook signed with the client's `webhookSigningSecret` |
-| **Card Vault** | PCI DSS Level 1 Certified Vault | Card data is processed and stored by a certified payment vault — never on Revtain application servers |
-| **Data Isolation** | Isolated Vault Environments | Each client gets an isolated payment vault environment |
+| **Connector Webhook Verification** | HMAC-SHA256 | Inbound webhooks from supported billing platforms (Chargebee, Stripe, ReCharge, etc.) are signature-verified against the client's platform secret before processing |
 | **Resilience** | Exponential Backoff | Outbound gateway calls retry with backoff on 5xx errors |
-| **Rate Limiting** | Per-API-Key | 60 requests/min on recovery; 10/min on tokenize |
+| **Rate Limiting** | Per-API-Key | 60 requests/min on recovery |
 
 ## Card Data Handling
 
-Revtain does **not** store, process, or transmit raw card numbers on its own servers.
+Revtain does **not** store, process, or transmit raw card numbers. Card data stays entirely within your existing gateway and never touches Revtain infrastructure.
 
-<CardGroup cols={2}>
-  <Card title="Fast Track Clients" icon="bolt">
-    Card data stays entirely within your existing payment stack. Revtain only receives gateway tokens.
-  </Card>
-  <Card title="Engine Room Clients" icon="vault">
-    Card data flows directly to a PCI DSS Level 1 certified payment vault.
-  </Card>
-</CardGroup>
+When a payment fails, you pass Revtain the **gateway token** (e.g. a Stripe `pm_xxx`). That token is an opaque reference — it cannot be reversed into card data. Revtain uses it only to instruct your gateway to retry the charge against the same stored credentials.
 
-In both cases, Revtain only handles **opaque tokens** that cannot be reversed into card data.
+The hosted card update page lets your customers replace their stored card without typing any details into Revtain-controlled fields. Card data flows from the customer's browser directly into your gateway's tokenisation API; Revtain receives only the resulting token. Your PCI scope is unchanged.
 
 ## API Key Security
 
@@ -46,6 +38,6 @@ In both cases, Revtain only handles **opaque tokens** that cannot be reversed in
 
 All outbound webhooks include an `X-Revtain-Signature` header. Always verify before processing — see the [Webhooks Guide](/guides/webhooks) for code examples.
 
-## PCI Compliance Documentation
+## Compliance Documentation
 
-For clients requiring PCI compliance documentation, Revtain can provide our vault infrastructure partner's certification under NDA. Contact the Revtain team for details.
+Revtain can provide an architecture diagram, processor relationship summary, and an SOC overview under NDA for procurement reviews. Contact the Revtain team for details.

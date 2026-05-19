@@ -27,7 +27,6 @@
             "pages": [
               "guides/connectors",
               "guides/api-integration",
-              "guides/iframe-integration",
               "guides/webhooks",
               "guides/card-update-links",
               "guides/dunning",

@@ -178,14 +178,18 @@ Sent when a customer updates their payment method via a hosted card update link.
 ```json
 {
   "event": "card.updated",
-  "oldPaymentMethodToken": "01KKZ10AD66A3VX260WKM0YFPG",
-  "newPaymentMethodToken": "02LLZ20BE77B4WY371XLN1ZGQH",
+  "oldPaymentMethodToken": "pm_oldcard123",
+  "newPaymentMethodToken": "pm_newcard456",
   "clientId": "da646dba-ce56-4483-ad0a-2a4fac54a5e2",
   "timestamp": "2026-04-20T14:30:00.000Z"
 }
 ```
 
-**Action:** Update the customer's stored payment method in your system with the new token. Use the new token for future recovery requests.
+**Action:** Store `newPaymentMethodToken` against the customer record in your system. Use it as the `paymentMethodToken` in all future `POST /api/recovery/execute` calls for this customer. The old token is no longer valid for recovery — discard it.
+
+<Note>
+  `newPaymentMethodToken` is a gateway-native token (for example a Stripe `pm_xxx` or a Checkout.com `src_xxx`), issued by the same gateway that holds the customer's account. You can pass it to your gateway directly as well — it's a real gateway token, not a Revtain reference.
+</Note>
 
 ---
 
