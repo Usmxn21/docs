@@ -7,23 +7,28 @@ For Chargebee, Recurly, Stripe Billing, Braintree Subscriptions, and Shopify sub
 
 ## How Connectors Work
 
+Going live takes two phases. Revtain runs the first. You run the second — and it takes about five minutes.
+
+### Phase 1 — Revtain provisions your account
+
+Share your billing platform and payment gateway details with the Revtain team. Revtain provisions your account, generates your credentials, and builds your webhook URL — typically the same business day. This step is hands-off: no forms to fill in, no configuration to write. You receive your API key, your webhook signing secret, and a webhook URL with your client ID embedded.
+
+### Phase 2 — Paste one URL
+
 <Steps>
-  <Step title="Select your billing platform during onboarding">
-    Provide your platform API key (Chargebee API key, Recurly API key, etc.).
+  <Step title="Open your billing platform's webhook settings">
+    The webhooks section of your Chargebee, Recurly, Stripe, Braintree, or ReCharge dashboard.
   </Step>
-  <Step title="Get your unique webhook URL">
-    Revtain generates a webhook URL with your client ID embedded.
-  </Step>
-  <Step title="Paste it into your billing platform's webhook settings">
-    Select the relevant payment failure event (e.g., `payment_failed`).
+  <Step title="Paste your Revtain webhook URL">
+    Add the URL from your credentials and select the relevant payment failure event (e.g., `payment_failed`).
   </Step>
   <Step title="Done — Revtain handles the rest">
-    On every failed payment: extract the gateway token, run the recovery engine, mark the invoice paid on success.
+    On every failed payment, Revtain extracts the gateway token, runs the recovery engine, and marks the invoice paid on success.
   </Step>
 </Steps>
 
 <Check>
-  No webhook handler to write. No API calls to make. No code to deploy.
+  Your only task is pasting one URL. No webhook handler to write, no API calls to make, no code to deploy.
 </Check>
 
 ## Supported Connectors
