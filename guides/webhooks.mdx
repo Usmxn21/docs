@@ -104,7 +104,7 @@ curl -X POST https://your-server.com/webhooks/revtain \
 </CodeGroup>
 
 <Note>
-  **Always respond with `200` within 10 seconds.** If your endpoint is down or slow, Revtain retries up to 3 times with exponential backoff (0s, 2s, 8s). After 3 failures, the event is logged for manual review.
+  **Always respond with `200` within 10 seconds.** If your endpoint is down or slow, Revtain retries delivery automatically — three immediate attempts (0s, 2s, 8s), then, if those fail, a durable retry schedule over the following 24 hours. A brief outage on your side will not lose an event.
 </Note>
 
 ## Event Reference
@@ -141,23 +141,38 @@ Sent when all retry strategies have been exhausted.
   "amount": 5000,
   "currency": "USD",
   "message": "Card declined",
-  "strategyUsed": "all_failed"
+  "strategyUsed": "all_failed",
+  "recommendedAction": "retry_later",
+  "recommendedActionReason": "The issuer returned a soft decline. A later retry, or a card update, may succeed."
 }
 ```
 
-**Action:** If `dunningEnabled` is `true`, Revtain will automatically start a [dunning sequence](/guides/dunning). Otherwise, trigger your own dunning email or send the customer a [card update link](/guides/card-update-links).
+**Action:** Branch on `recommendedAction` (see table below). If `dunningEnabled` is `true`, Revtain also starts a [dunning sequence](/guides/dunning) automatically.
+
+#### `recommendedAction` values
+
+`recovery.failed` and `recovery.blocked` both carry a `recommendedAction` field, so your dunning logic can branch on a stable signal instead of parsing raw decline codes. `recommendedActionReason` is a human-readable explanation of the same signal.
+
+| Value | What to do |
+|-------|------------|
+| `retry_later` | A soft or transient decline. A later retry — or a card update — may succeed. |
+| `request_card_update` | The card is expired, invalid, or needs customer authentication. Ask the customer to update or re-confirm their payment method. |
+| `manual_review` | The issuer flagged the card for fraud. Do not retry — review the account. |
+| `monitor` | The reason is ambiguous (for example a suspected duplicate). Verify before retrying. |
 
 ---
 
 ### `recovery.blocked`
 
-Sent when the Risk Engine blocks a transaction (fraud, lost card, etc.).
+Sent when a transaction is stopped before any retry — either by the Risk Engine (fraud, lost card) or because the issuer requires the customer to authenticate.
 
 ```json
 {
   "event": "recovery.blocked",
   "declineCode": "fraudulent",
   "reason": "Transaction blocked by Revtain Risk Engine to protect Merchant Health.",
+  "recommendedAction": "manual_review",
+  "recommendedActionReason": "The issuer flagged this card for fraud. Do not retry — review the account.",
   "paymentMethodToken": "pm_1234567890",
   "amount": 5000,
   "currency": "USD",
@@ -165,9 +180,7 @@ Sent when the Risk Engine blocks a transaction (fraud, lost card, etc.).
 }
 ```
 
-<Warning>
-  **Action:** Flag the account for review. Do **NOT** retry this payment.
-</Warning>
+**Action:** Branch on `recommendedAction`. A `manual_review` value means flag the account and do not retry. A `request_card_update` value — for example when `declineCode` is `authentication_required` — means route the customer through your checkout to re-confirm their card.
 
 ---
 
@@ -209,3 +222,46 @@ Sent when the pre-failure risk prediction engine detects a high-risk payment **b
 ```
 
 **Action:** Consider reaching out to the customer to update their payment method before the next billing cycle. Generate a card update link via [`/api/recovery/update-card/generate`](/api-reference/endpoint/generate-card-update-link).
+
+---
+
+### `card.expiring_soon`
+
+Sent by a billing-platform connector ahead of a renewal when the customer's card on file is close to its expiry date. It lets you prompt the customer before the payment fails.
+
+```json
+{
+  "event": "card.expiring_soon",
+  "customerId": "cus_abc123",
+  "paymentMethodToken": "pm_1234567890",
+  "expMonth": 8,
+  "expYear": 2026,
+  "daysUntilExpiry": 21,
+  "timestamp": "2026-05-20T09:00:00.000Z"
+}
+```
+
+**Action:** Reach out to the customer and ask them to update their card before the next renewal. This is a connector event and is sent only when pre-dunning is enabled on your account.
+
+<Note>
+  Connectors for some platforms include extra context — for example, the Stripe Billing connector also sends `upcomingInvoiceAmount` and `currency`. Treat any additional fields as optional.
+</Note>
+
+---
+
+### `recovery.3ds_recommended`
+
+Sent after a failed recovery when the decline pattern suggests the charge would clear with 3-D Secure authentication — typically a soft decline from a European or UK issuer.
+
+```json
+{
+  "event": "recovery.3ds_recommended",
+  "paymentMethodToken": "pm_1234567890",
+  "amount": 5000,
+  "currency": "USD",
+  "declineCode": "do_not_honor",
+  "reason": "Soft decline from EU/UK issuer may benefit from 3D Secure authentication. Re-attempt this charge with 3DS enabled on your checkout."
+}
+```
+
+**Action:** Re-attempt the charge through your own checkout with 3-D Secure enabled, so the customer can authenticate.

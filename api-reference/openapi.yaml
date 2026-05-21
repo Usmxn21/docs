@@ -6,7 +6,7 @@ info:
 
     ## Choose Your Path
 
-    **Using Chargebee, Recurly, Stripe Billing, Braintree, or Shopify (ReCharge)?**
+    **Using Chargebee, Recurly, Stripe Billing, Braintree, Zuora, or Shopify (ReCharge)?**
     Use a Connector — paste one webhook URL, no code, 5 minutes.
 
     **Custom billing system or want full API control?**
@@ -170,6 +170,15 @@ components:
         recoveryEngineApplied:
           type: boolean
           example: true
+        recommendedAction:
+          type: string
+          enum: [request_card_update, retry_later, manual_review, monitor]
+          description: "What to do next about this failure. Branch your dunning logic on this stable signal rather than parsing the raw decline code."
+          example: retry_later
+        recommendedActionReason:
+          type: string
+          description: Human-readable explanation of the recommended action.
+          example: "The issuer returned a soft decline. A later retry, or a card update, may succeed."
         ai:
           type: object
           properties:
@@ -204,9 +213,15 @@ components:
         action:
           type: string
           example: blocked
+        recommendedAction:
+          type: string
+          enum: [request_card_update, retry_later, manual_review, monitor]
+          description: "What to do next. `manual_review` for fraud signals; `request_card_update` when the issuer requires authentication or a new card."
+          example: manual_review
         recommendation:
           type: string
-          example: Flag this account for review. The issuer has indicated this card should not be retried.
+          description: Human-readable explanation of the recommended action.
+          example: "The issuer flagged this card for fraud. Do not retry — review the account."
 
     ExecuteRecoveryDuplicate:
       type: object
@@ -270,6 +285,9 @@ components:
           type: string
           enum: [succeeded, failed, blocked, unknown]
           example: succeeded
+        recovered:
+          type: boolean
+          example: true
         amount:
           type: integer
           example: 5000
@@ -279,10 +297,29 @@ components:
         recoveredAt:
           type: string
           format: date-time
+          nullable: true
           example: "2026-03-17T23:15:21.000Z"
         strategyUsed:
           type: string
           example: primary
+        attemptCount:
+          type: integer
+          description: Number of gateway attempts made during the cascade.
+          example: 2
+        lastDeclineCode:
+          type: string
+          nullable: true
+          description: The most recent decline code seen for this recovery.
+          example: do_not_honor
+        recommendedAction:
+          type: string
+          enum: [request_card_update, retry_later, manual_review, monitor]
+          description: "What to do next. Present only when the recovery did not succeed."
+          example: retry_later
+        recommendedActionReason:
+          type: string
+          description: Human-readable explanation of the recommended action. Present only when the recovery did not succeed.
+          example: "The issuer returned a soft decline. A later retry, or a card update, may succeed."
 
     CardUpdateRequest:
       type: object
@@ -460,6 +497,7 @@ paths:
         | Category | Example Codes | What Happens |
         |----------|---------------|--------------|
         | Recoverable | `insufficient_funds`, `do_not_honor`, `call_issuer`, `try_again_later`, `card_declined` | Optimal recovery strategy applied |
+        | Authentication required | `authentication_required` | No retry — issuer needs the customer to authenticate. `403` returned, webhook fired |
         | Blocked | `fraudulent`, `lost_card`, `pickup_card`, `restricted_card` | Transaction blocked, webhook fired |
         | Unknown | Any unrecognised code | Conservative recovery attempted |
       operationId: executeRecovery
@@ -548,6 +586,8 @@ paths:
                     strategyUsed: all_failed
                     gatewaysAttempted: 1
                     recoveryEngineApplied: true
+                    recommendedAction: retry_later
+                    recommendedActionReason: "The issuer returned a soft decline. A later retry, or a card update, may succeed."
                     ai:
                       score: 35.2
                       confidence: 45
@@ -583,7 +623,8 @@ paths:
                 error: Transaction blocked by Revtain Risk Engine to protect Merchant Health.
                 declineCode: fraudulent
                 action: blocked
-                recommendation: Flag this account for review. The issuer has indicated this card should not be retried.
+                recommendedAction: manual_review
+                recommendation: "The issuer flagged this card for fraud. Do not retry — review the account."
         "409":
           description: Duplicate recovery request
           content:
@@ -647,11 +688,15 @@ paths:
     get:
       tags:
         - Recovery Engine
-      summary: Get Recovery Status
+      summary: Get Recovery Status by Transaction ID
       description: |
-        Poll the current status of a recovery attempt.
+        Poll the current status of a recovery attempt by its transaction ID.
 
         The `transactionId` is the value returned from `/api/recovery/execute`.
+
+        The response includes the number of gateway attempts, the last decline code seen, and — when the recovery did not succeed — a recommended next action.
+
+        To look a recovery up by the `idempotencyKey` you supplied instead, use `GET /api/recovery/status?idempotencyKey=...`.
 
         > Clients can only query their own transactions.
       operationId: getRecoveryStatus
@@ -673,10 +718,69 @@ paths:
               example:
                 transactionId: 01KKZ14FEZK152ZBXEM2XK1B0C
                 status: succeeded
+                recovered: true
                 amount: 5000
                 currency: USD
                 recoveredAt: "2026-03-17T23:15:21.000Z"
                 strategyUsed: primary
+                attemptCount: 1
+                lastDeclineCode: do_not_honor
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UnauthorizedError"
+        "404":
+          description: Transaction not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotFoundError"
+
+  /api/recovery/status:
+    get:
+      tags:
+        - Recovery Engine
+      summary: Get Recovery Status by Idempotency Key
+      description: |
+        Poll the current status of a recovery attempt by the `idempotencyKey` you supplied to `/api/recovery/execute`. An alternative to looking up by transaction ID.
+
+        > Clients can only query their own transactions.
+      operationId: getRecoveryStatusByIdempotencyKey
+      parameters:
+        - name: idempotencyKey
+          in: query
+          required: true
+          description: The idempotency key you supplied to `/api/recovery/execute`.
+          schema:
+            type: string
+          example: order_12345_retry_1
+      responses:
+        "200":
+          description: Recovery status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RecoveryStatusResponse"
+              example:
+                transactionId: FAILED_API_1773792234011
+                status: failed
+                recovered: false
+                amount: 5000
+                currency: USD
+                recoveredAt: null
+                strategyUsed: all_failed
+                attemptCount: 2
+                lastDeclineCode: do_not_honor
+                recommendedAction: retry_later
+                recommendedActionReason: "The issuer returned a soft decline. A later retry, or a card update, may succeed."
+        "400":
+          description: Validation error — provide a transactionId in the path or an idempotencyKey query parameter
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ValidationError"
         "401":
           description: Unauthorized
           content:

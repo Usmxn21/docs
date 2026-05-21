@@ -10,6 +10,7 @@ When passing `originalDeclineCode`, the recovery engine automatically determines
 | Category | Example Codes | What Happens |
 |----------|---------------|--------------|
 | **Recoverable** | `insufficient_funds`, `do_not_honor`, `call_issuer`, `try_again_later`, `card_declined`, `generic_decline`, `expired_card` | The engine applies the optimal recovery strategy for this decline type. Recovery is attempted automatically. |
+| **Authentication required** | `authentication_required` | The card is valid but the issuer requires the customer to authenticate (3-D Secure). A merchant-initiated retry cannot complete a customer-present challenge, so no retry is attempted. Webhook notification sent. |
 | **Blocked** | `fraudulent`, `lost_card`, `pickup_card`, `restricted_card`, `fraud_suspected` | Transaction is blocked to protect the merchant. **No recovery attempted.** Webhook notification sent. |
 | **Unknown** | Any unrecognised code | Conservative recovery attempted. |
 | **Not provided** | `null` / omitted | Recovery attempted using available transaction signals. |
@@ -25,6 +26,7 @@ Different declines need different strategies:
 - **`insufficient_funds`** → Retry on payday, end of month, or after a known billing cycle
 - **`do_not_honor`** → Retry with optimised timing and issuer-trust signals
 - **`expired_card`** → Skip the retry, refresh the token via the account updater, and prompt the customer to update their card
+- **`authentication_required`** → Skip the retry — the customer must re-authenticate the card through your checkout
 - **`fraudulent`** → Block immediately — retrying causes chargebacks and damages merchant health
 
 The Revtain engine encodes these patterns based on industry-wide observation. By passing the decline code, you let the engine pick the right path automatically.
@@ -41,3 +43,17 @@ For blocked decline codes (e.g., `fraudulent`, `lost_card`), Revtain:
 <Warning>
   **Do not retry blocked transactions on your own.** Repeatedly attempting fraudulent or lost-card payments will trigger chargebacks and damage your merchant account standing.
 </Warning>
+
+## What Happens with `authentication_required`
+
+Some issuers — increasingly common in Europe under Strong Customer Authentication — decline a charge because the cardholder must complete 3-D Secure. The card itself is valid.
+
+A retry from Revtain runs without the customer present, so it cannot satisfy a 3-D Secure challenge. Retrying the same charge wastes attempts and erodes issuer trust. Instead, Revtain:
+
+1. Returns `403 Forbidden` immediately
+2. Fires a `recovery.blocked` webhook with `declineCode: "authentication_required"` and `recommendedAction: "request_card_update"`
+3. Does **not** attempt any retry
+
+<Tip>
+  Route the customer back through your own checkout to re-enter or re-confirm their card. Your payment gateway runs the 3-D Secure challenge there — once authenticated, submit the resulting token to `/api/recovery/execute` as normal.
+</Tip>

@@ -1,9 +1,9 @@
 ---
 title: "Zero-Code Connectors"
-description: "Native integrations for Chargebee, Recurly, Stripe Billing, Braintree, and Shopify (ReCharge). No code required."
+description: "Native integrations for Chargebee, Recurly, Stripe Billing, Braintree, Zuora, and Shopify (ReCharge). No code required."
 ---
 
-For Chargebee, Recurly, Stripe Billing, Braintree Subscriptions, and Shopify subscriptions via ReCharge, Revtain provides direct connectors that require **no code on your side**. Paste a single webhook URL into your billing platform settings — Revtain handles everything.
+For Chargebee, Recurly, Stripe Billing, Braintree Subscriptions, Zuora, and Shopify subscriptions via ReCharge, Revtain provides direct connectors that require **no code on your side**. Paste a single webhook URL into your billing platform settings — Revtain handles everything.
 
 ## How Connectors Work
 
@@ -17,7 +17,7 @@ Share your billing platform and payment gateway details with the Revtain team. R
 
 <Steps>
   <Step title="Open your billing platform's webhook settings">
-    The webhooks section of your Chargebee, Recurly, Stripe, Braintree, or ReCharge dashboard.
+    The webhooks (or notifications) section of your Chargebee, Recurly, Stripe, Braintree, Zuora, or ReCharge dashboard.
   </Step>
   <Step title="Paste your Revtain webhook URL">
     Add the URL from your credentials and select the relevant payment failure event (e.g., `payment_failed`).
@@ -39,6 +39,7 @@ Share your billing platform and payment gateway details with the Revtain team. R
 | **Recurly** | `https://api.revtain.com/api/connectors/recurly/webhook/{clientId}` | `failed_payment`, `billing_info_updated_notification` |
 | **Stripe Billing** | `https://api.revtain.com/api/connectors/stripe-billing/webhook/{clientId}` | `invoice.payment_failed`, `payment_method.attached`, `payment_intent.succeeded` |
 | **Braintree Subscriptions** | `https://api.revtain.com/api/connectors/braintree/webhook/{clientId}` | `subscription_went_past_due` |
+| **Zuora** | `https://api.revtain.com/api/connectors/zuora/webhook/{clientId}` | `Payment.Failure` |
 | **Shopify (ReCharge)** | `https://api.revtain.com/api/connectors/shopify-recharge/webhook/{clientId}` | `charge/failed`, `subscription/payment_failure_count_exceeded` |
 
 ## Setup Instructions
@@ -96,6 +97,20 @@ Share your billing platform and payment gateway details with the Revtain team. R
     - On success, Braintree detects the payment and updates the subscription status
   </Accordion>
 
+  <Accordion title="Zuora" icon="credit-card">
+    1. During Revtain onboarding, select **Zuora** as your billing platform
+    2. Enter your Zuora REST API key and your Zuora REST domain (for example `rest.zuora.com`, `rest.eu.zuora.com`, or your sandbox domain)
+    3. In Zuora, go to **Settings → Notifications → Add Notification → Callout**
+    4. Select the **Payment.Failure** event
+    5. Set the HTTP method to **POST**, content type **application/json**, and the URL to the one in your credentials modal
+
+    **What Revtain does automatically:**
+    - Extracts the payment method ID from the failure event
+    - Looks up the gateway token from the Zuora payment method via the Zuora API
+    - Runs the recovery engine with the gateway response code
+    - On success, records the payment on the Zuora invoice
+  </Accordion>
+
   <Accordion title="Shopify (ReCharge)" icon="shop">
     For Shopify stores running subscriptions through ReCharge.
 
@@ -130,7 +145,7 @@ For multi-gateway clients on Chargebee and Recurly, this means a decline that ca
 | **Code required** | None — paste one URL | Webhook handler + API calls |
 | **Setup time** | 5 minutes | 30-60 minutes |
 | **Invoice reconciliation** | Automatic | Manual (in your webhook handler) |
-| **Available for** | Chargebee, Recurly, Stripe Billing, Braintree, Shopify (ReCharge) | Any billing system |
+| **Available for** | Chargebee, Recurly, Stripe Billing, Braintree, Zuora, Shopify (ReCharge) | Any billing system |
 | **Customisation** | Standard recovery flow | Full control |
 
 <Note>
