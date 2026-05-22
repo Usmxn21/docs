@@ -15,15 +15,16 @@ X-API-KEY: rev_dTviCg52T8gLPCjrrW4KA0NKf_f5pQgk
 
 ## Onboarding Credentials
 
-Revtain provisions your account and issues your credentials — typically the same business day. You receive two:
+Revtain provisions your account and issues your credentials — typically the same business day. You receive three:
 
 | Credential | Format | Purpose |
 |------------|--------|---------|
-| **API Key** | `rev_xxxxxxxxxxxxxxxxxxxxxxxx` | Authenticates all API requests |
+| **API Key** (secret) | `rev_xxxxxxxxxxxxxxxxxxxxxxxx` | Authenticates all API requests. Can trigger charges — keep it server-side only. |
+| **Publishable Key** | `rev_pk_xxxxxxxxxxxxxxxxxxxxxxxx` | Read-only key, safe to embed in client-side code. Used by the [in-app payment wall](/guides/in-app-paywall). Cannot trigger charges. |
 | **Webhook Signing Secret** | `whsec_xxxxxxxxxxxxxxxxxxxxxxxx` | Verifies inbound webhook signatures |
 
 <Note>
-  Both are shown **once** during onboarding. Store them in environment variables — never in client-side code or repositories.
+  The API key and webhook signing secret are sensitive — store them in environment variables, never in client-side code or repositories. The publishable key is designed to be public and is the only credential safe to ship in a browser.
 </Note>
 
 ## What You Provide
@@ -45,6 +46,7 @@ Revtain provisions your account and issues your credentials — typically the sa
 | Endpoint | Limit |
 |----------|-------|
 | `/api/recovery/execute` | 60 requests / minute / API key |
+| `/api/recovery/paywall-status` | 120 requests / minute / key |
 | All others | No specific limit (fair-use applies) |
 
 Rate-limited requests return `429 Too Many Requests` with a `retryAfter` field.

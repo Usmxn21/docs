@@ -1,0 +1,70 @@
+---
+title: "In-App Payment Wall"
+description: "A drop-in script that prompts past-due customers to update their payment method the next time they open your app."
+---
+
+The in-app payment wall is a small JavaScript snippet you add to your web app. When a customer with an unrecovered failed payment loads the app, it shows an overlay directing them to update their payment details. Customers in good standing never see it.
+
+It is a recovery surface, not a hard gate — the customer can dismiss the overlay and keep using your app.
+
+## The Publishable Key
+
+The snippet runs in the customer's browser, so it authenticates with your **publishable key** (`rev_pk_...`) — not your secret API key.
+
+<Warning>
+  Never put your secret API key (`rev_...`) in client-side code — it can trigger charges. The publishable key is read-only: it can only check paywall status and cannot move money. Both keys are returned when you onboard.
+</Warning>
+
+## Installation
+
+Add one script tag to your app, ideally just before the closing `</body>` tag.
+
+### Option 1 — Data attributes
+
+```html
+<script src="https://api.revtain.com/revtain-paywall.js"
+  data-publishable-key="rev_pk_YOUR_PUBLISHABLE_KEY"
+  data-customer-email="customer@example.com"
+  data-card-update-url="https://app.yourdomain.com/billing">
+</script>
+```
+
+### Option 2 — Config object
+
+Set `window.RevtainPaywall` before the script loads — useful when the signed-in customer's email is only known at runtime.
+
+```html
+<script>
+  window.RevtainPaywall = {
+    publishableKey: 'rev_pk_YOUR_PUBLISHABLE_KEY',
+    customerEmail:  currentUser.email,
+    cardUpdateUrl:  'https://app.yourdomain.com/billing',
+    brandName:      'Acme SaaS',
+    brandColor:     '#2dd4bf',
+  };
+</script>
+<script src="https://api.revtain.com/revtain-paywall.js"></script>
+```
+
+## Configuration
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `publishableKey` | Yes | Your publishable key (`rev_pk_...`). |
+| `customerEmail` | Yes | The signed-in customer's email — the same value you pass as `customerEmail` to `/api/recovery/execute`. |
+| `cardUpdateUrl` | Recommended | Where the "Update payment method" button sends the customer. Use the page where customers manage their payment method. |
+| `brandName` | Optional | Name shown in the overlay heading. |
+| `brandColor` | Optional | Accent colour (hex). Defaults to `#2dd4bf`. |
+
+Data-attribute names are the kebab-case form of each field — `data-publishable-key`, `data-customer-email`, `data-card-update-url`, and so on.
+
+## How It Behaves
+
+- **Shows only for past-due customers.** The snippet calls `GET /api/recovery/paywall-status` once per browser session. If the customer has no unrecovered failed payment, nothing renders.
+- **Checked once per session.** The result is cached in `sessionStorage`, so route changes in a single-page app do not re-call the API.
+- **Never blocks your app.** If the check times out or errors, the snippet stays silent. A Revtain outage cannot break your app.
+- **Dismissible.** The overlay includes a dismiss link. The wall is a prompt, not a lock.
+
+## What the Customer Sees
+
+The overlay states that a payment is past due, shows the amount owed when available, and offers a button to update the payment method. Point `cardUpdateUrl` at a page where the customer can fix their card — your billing settings page is the usual choice.

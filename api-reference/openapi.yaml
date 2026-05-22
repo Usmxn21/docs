@@ -890,6 +890,8 @@ paths:
         Returns whether a specific customer currently has an unrecovered past-due payment, and the total amount owed.
 
         Use this to power an in-app prompt that asks a past-due customer to update their payment method. The bundled `revtain-paywall.js` snippet calls this endpoint for you; you can also call it directly.
+
+        **Authentication:** this endpoint accepts your **publishable key** (`rev_pk_...`) in the `X-API-KEY` header, so it is safe to call from client-side code. Your secret API key also works for server-side calls.
       operationId: getPaywallStatus
       parameters:
         - name: customerEmail
