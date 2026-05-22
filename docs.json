@@ -30,6 +30,7 @@
               "guides/webhooks",
               "guides/card-update-links",
               "guides/dunning",
+              "guides/cancel-flow",
               "guides/testing",
               "guides/integration-checklist",
               "guides/troubleshooting"

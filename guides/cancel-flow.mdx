@@ -1,0 +1,118 @@
+---
+title: "Cancel Flow"
+description: "Reduce voluntary churn with a hosted retention page. When a customer tries to cancel, present pause, discount, or downgrade offers before they leave."
+---
+
+When a customer clicks cancel in your app, send them to a Revtain-hosted retention page instead of cancelling straight away. The page presents the offers you have configured — pause the subscription, apply a discount, or downgrade to a cheaper plan — and reports the customer's decision back to you by webhook.
+
+The page is branded to your business. The customer sees your name and colours, not Revtain's.
+
+<Note>
+  Cancel flow is enabled per account. Contact Revtain to turn it on and to configure your retention offers — which options appear, the discount percentage, and the pause length.
+</Note>
+
+## How It Works
+
+<Steps>
+  <Step title="Customer clicks cancel in your app">
+    Intercept the cancellation in your own UI. Do not cancel the subscription yet.
+  </Step>
+  <Step title="Generate a cancel flow link">
+    Call `POST /api/cancel-flow/generate` from your backend with the customer's details. You receive a unique, time-limited URL.
+  </Step>
+  <Step title="Redirect the customer to the URL">
+    The customer sees your branded retention page with the offers you have configured.
+  </Step>
+  <Step title="Receive the outcome">
+    When the customer makes a choice, Revtain sends a `churn.flow.{outcome}` webhook. Apply the decision in your billing system.
+  </Step>
+</Steps>
+
+## Generate a Cancel Flow Link
+
+Call this from your backend — it requires your API key.
+
+<CodeGroup>
+
+```bash cURL
+curl -X POST https://api.revtain.com/api/cancel-flow/generate \
+  -H "X-API-KEY: rev_YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "customerId": "cus_abc123",
+    "customerEmail": "customer@example.com",
+    "subscriptionId": "sub_789",
+    "amount": 2900,
+    "currency": "USD",
+    "returnUrl": "https://app.yourdomain.com/account"
+  }'
+```
+
+```javascript Node.js
+const res = await fetch('https://api.revtain.com/api/cancel-flow/generate', {
+  method: 'POST',
+  headers: {
+    'X-API-KEY': process.env.REVTAIN_API_KEY,
+    'Content-Type': 'application/json',
+  },
+  body: JSON.stringify({
+    customerId: 'cus_abc123',
+    customerEmail: 'customer@example.com',
+    subscriptionId: 'sub_789',
+    amount: 2900,
+    currency: 'USD',
+    returnUrl: 'https://app.yourdomain.com/account',
+  }),
+});
+
+const { url } = await res.json();
+// Redirect the customer to `url`
+```
+
+</CodeGroup>
+
+Only `customerId` is required. `amount` — the recurring charge in the smallest currency unit — lets the page frame the offer accurately. `returnUrl` is where the customer lands after finishing.
+
+The response:
+
+```json
+{
+  "url": "https://api.revtain.com/api/cancel-flow/abc123xyz...",
+  "token": "abc123xyz...",
+  "expiresAt": "2026-05-23T14:30:00.000Z"
+}
+```
+
+<Note>
+  The link is valid for **48 hours** and can be used once. Generate a fresh link each time a customer starts a cancellation.
+</Note>
+
+## Handle the Outcome
+
+When the customer completes the flow, Revtain sends a [`churn.flow.{outcome}`](/guides/webhooks) webhook. The outcome is one of:
+
+| Outcome | Meaning | What to do |
+|---------|---------|------------|
+| `retained` | The customer accepted a discount or chose to stay | Apply the discount if one was offered; keep the subscription active |
+| `paused` | The customer paused the subscription | Pause billing for the configured period |
+| `downgraded` | The customer moved to a cheaper plan | Switch the customer to the lower plan |
+| `cancelled` | The customer still chose to cancel | Cancel the subscription |
+
+```json
+{
+  "event": "churn.flow.paused",
+  "customerId": "cus_abc123",
+  "customerEmail": "customer@example.com",
+  "subscriptionId": "sub_789",
+  "outcome": "paused",
+  "timestamp": "2026-05-21T16:40:00.000Z"
+}
+```
+
+<Warning>
+  Revtain records the customer's decision and notifies you — it does not change the subscription in your billing system. Applying the outcome (pause, downgrade, cancel) is the job of your webhook handler.
+</Warning>
+
+## Verify the Webhook
+
+The `churn.flow` webhook is signed like every other Revtain webhook. Verify the `X-Revtain-Signature` header before acting on it — see [Webhooks](/guides/webhooks) for the verification steps.

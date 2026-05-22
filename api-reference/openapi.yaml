@@ -497,7 +497,7 @@ components:
           type: string
           format: uri
           description: The hosted retention page URL to send the customer to.
-          example: "https://pay.yourdomain.com/api/cancel-flow/abc123xyz..."
+          example: "https://api.revtain.com/api/cancel-flow/abc123xyz..."
         token:
           type: string
           example: abc123xyz...
@@ -1016,7 +1016,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/GenerateCancelFlowResponse"
               example:
-                url: "https://pay.yourdomain.com/api/cancel-flow/abc123xyz..."
+                url: "https://api.revtain.com/api/cancel-flow/abc123xyz..."
                 token: abc123xyz...
                 expiresAt: "2026-05-23T14:30:00.000Z"
         "400":
