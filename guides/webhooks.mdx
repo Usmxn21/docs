@@ -265,3 +265,22 @@ Sent after a failed recovery when the decline pattern suggests the charge would 
 ```
 
 **Action:** Re-attempt the charge through your own checkout with 3-D Secure enabled, so the customer can authenticate.
+
+---
+
+### `churn.flow.{outcome}`
+
+Sent when a customer completes the hosted [cancel flow](/api-reference/endpoint/generate-cancel-flow-link). The event name carries the outcome: `churn.flow.retained`, `churn.flow.paused`, `churn.flow.downgraded`, or `churn.flow.cancelled`.
+
+```json
+{
+  "event": "churn.flow.paused",
+  "customerId": "cus_abc123",
+  "customerEmail": "customer@example.com",
+  "subscriptionId": "sub_789",
+  "outcome": "paused",
+  "timestamp": "2026-05-21T16:40:00.000Z"
+}
+```
+
+**Action:** Apply the customer's decision in your billing system — pause, downgrade, or cancel the subscription, or take no action if they were retained.

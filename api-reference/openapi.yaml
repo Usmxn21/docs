@@ -45,6 +45,8 @@ tags:
     description: Trigger and track payment recovery attempts
   - name: Predictive Risk Engine
     description: Pre-screen payments before they fail
+  - name: Retention
+    description: Hosted cancel flow to reduce voluntary churn
   - name: Health
     description: Service health check
 
@@ -430,6 +432,91 @@ components:
           type: boolean
           example: true
 
+    PaywallStatusResponse:
+      type: object
+      properties:
+        isPastDue:
+          type: boolean
+          description: Whether the customer currently has one or more unrecovered failed payments.
+          example: true
+        totalOwedCents:
+          type: integer
+          description: Total outstanding across all unrecovered failed payments, in the smallest currency unit.
+          example: 4900
+        currency:
+          type: string
+          example: USD
+        failedPaymentCount:
+          type: integer
+          description: Number of unrecovered failed payments for this customer.
+          example: 1
+        oldestFailureAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Timestamp of the oldest unrecovered failure. Null when the customer is not past due.
+          example: "2026-05-14T09:12:00.000Z"
+
+    GenerateCancelFlowRequest:
+      type: object
+      required:
+        - customerId
+      properties:
+        customerId:
+          type: string
+          description: Your internal identifier for the customer.
+          example: cus_abc123
+        customerEmail:
+          type: string
+          format: email
+          description: The customer's email address.
+          example: customer@example.com
+        subscriptionId:
+          type: string
+          description: Your internal subscription identifier. Echoed back on the churn webhook.
+          example: sub_789
+        amount:
+          type: integer
+          minimum: 0
+          description: The recurring charge in the smallest currency unit. Used to render the retention offer.
+          example: 2900
+        currency:
+          type: string
+          description: 3-letter ISO 4217 currency code.
+          example: USD
+        returnUrl:
+          type: string
+          format: uri
+          description: Where to send the customer after they complete the flow.
+          example: https://app.yourdomain.com/account
+
+    GenerateCancelFlowResponse:
+      type: object
+      properties:
+        url:
+          type: string
+          format: uri
+          description: The hosted retention page URL to send the customer to.
+          example: "https://pay.yourdomain.com/api/cancel-flow/abc123xyz..."
+        token:
+          type: string
+          example: abc123xyz...
+        expiresAt:
+          type: string
+          format: date-time
+          description: The URL is valid for 48 hours and can be used once.
+          example: "2026-05-23T14:30:00.000Z"
+
+    FeatureNotEnabledError:
+      type: object
+      properties:
+        error:
+          type: string
+          example: Cancel flow is not enabled for this account.
+        message:
+          type: string
+          example: Contact Revtain to enable the hosted cancel flow for your account.
+
     ValidationError:
       type: object
       properties:
@@ -794,6 +881,62 @@ paths:
               schema:
                 $ref: "#/components/schemas/NotFoundError"
 
+  /api/recovery/paywall-status:
+    get:
+      tags:
+        - Recovery Engine
+      summary: Get Customer Paywall Status
+      description: |
+        Returns whether a specific customer currently has an unrecovered past-due payment, and the total amount owed.
+
+        Use this to power an in-app prompt that asks a past-due customer to update their payment method. The bundled `revtain-paywall.js` snippet calls this endpoint for you; you can also call it directly.
+      operationId: getPaywallStatus
+      parameters:
+        - name: customerEmail
+          in: query
+          required: true
+          description: The customer's email address — the same value passed as `customerEmail` on `/api/recovery/execute`.
+          schema:
+            type: string
+            format: email
+          example: customer@example.com
+      responses:
+        "200":
+          description: Paywall status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaywallStatusResponse"
+              examples:
+                past_due:
+                  summary: Customer is past due
+                  value:
+                    isPastDue: true
+                    totalOwedCents: 4900
+                    currency: USD
+                    failedPaymentCount: 1
+                    oldestFailureAt: "2026-05-14T09:12:00.000Z"
+                clear:
+                  summary: Customer is in good standing
+                  value:
+                    isPastDue: false
+                    totalOwedCents: 0
+                    currency: USD
+                    failedPaymentCount: 0
+                    oldestFailureAt: null
+        "400":
+          description: Missing customer identifier
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ValidationError"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UnauthorizedError"
+
   /api/recovery/update-card/generate:
     post:
       tags:
@@ -839,6 +982,61 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/UnauthorizedError"
+
+  /api/cancel-flow/generate:
+    post:
+      tags:
+        - Retention
+      summary: Generate Cancel Flow Link
+      description: |
+        Generates a secure, time-limited URL for the hosted retention flow. When a customer clicks cancel in your app, send them to this URL — Revtain serves a branded page offering the retention options configured on your account (pause, discount, downgrade).
+
+        - URL is valid for **48 hours** and can be used once
+        - When the customer makes a choice, you receive a `churn.flow.{outcome}` webhook
+        - Requires the cancel flow to be enabled on your account
+      operationId: generateCancelFlowLink
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GenerateCancelFlowRequest"
+            example:
+              customerId: cus_abc123
+              customerEmail: customer@example.com
+              subscriptionId: sub_789
+              amount: 2900
+              currency: USD
+              returnUrl: https://app.yourdomain.com/account
+      responses:
+        "201":
+          description: Cancel flow link created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GenerateCancelFlowResponse"
+              example:
+                url: "https://pay.yourdomain.com/api/cancel-flow/abc123xyz..."
+                token: abc123xyz...
+                expiresAt: "2026-05-23T14:30:00.000Z"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ValidationError"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UnauthorizedError"
+        "403":
+          description: Cancel flow is not enabled for this account
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FeatureNotEnabledError"
 
   /api/predict/risk:
     post:
