@@ -78,7 +78,11 @@ app.post('/your-backend/charge', async (req, res) => {
       currency: 'USD',
       originalDeclineCode: declineCode,
       cardOrigin: 'US',
-      idempotencyKey: `order_${orderId}_recovery`
+      idempotencyKey: `order_${orderId}_recovery`,
+      // Set when the failed charge came from Apple Pay / Google Pay / PayPal.
+      // Defaults to 'card' if omitted. Wallet payments get a higher predicted
+      // recovery score, so passing this correctly meaningfully lifts results.
+      paymentMethodType: payment.paymentMethodType || 'card'
     })
   });
 
@@ -138,7 +142,10 @@ def charge():
             'currency': 'USD',
             'originalDeclineCode': decline_code,
             'cardOrigin': 'US',
-            'idempotencyKey': f'order_{order_id}_recovery'
+            'idempotencyKey': f'order_{order_id}_recovery',
+            # Set to 'apple_pay', 'google_pay', 'paypal', or 'venmo' when the
+            # failed charge came from a wallet. Defaults to 'card' if omitted.
+            'paymentMethodType': data.get('paymentMethodType', 'card')
         }
     )
 
@@ -184,7 +191,7 @@ async function handlePaymentFailure(payment) {
 The only requirement is that you have the customer's payment token from your gateway. Everything else is the same regardless of billing platform.
 
 <Tip>
-  **Apple Pay / Google Pay customers.** Any gateway-native token works — including the `pm_xxx` tokens Stripe issues for Apple Pay and Google Pay charges. You don't pass anything different; Revtain retries them on the same gateway the same way as a card token.
+  **Apple Pay / Google Pay / PayPal customers.** Any gateway-native token works — including the `pm_xxx` tokens Stripe issues for Apple Pay and Google Pay charges. Pass the wallet identifier in `paymentMethodType` (`apple_pay`, `google_pay`, `paypal`, or `venmo`) so the recovery engine applies the right strategy. Recovery rates on wallet payments are materially higher when this field is set correctly — wallet tokens ride network tokens with built-in cryptograms, which the predictor weights accordingly.
 </Tip>
 
 ## Optional: Pre-Screening Risky Payments

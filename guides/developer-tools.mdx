@@ -1,0 +1,151 @@
+---
+title: "Developer Tools (Public APIs)"
+description: "Free public endpoints for BIN lookup and decline-code normalisation. No auth, no rate limit for reasonable use."
+---
+
+Revtain exposes a small set of free public endpoints that your team can call from anywhere — debugging tools, internal dashboards, fraud screens, support tools. They're the same endpoints that power the live tools at [revtain.com/tools](https://revtain.com/tools).
+
+No authentication. No API key. CORS is open so you can call them from a browser as well as a server.
+
+## BIN Lookup
+
+Identify the issuing bank, country, network, and card type from any 4 to 8 digit Bank Identification Number (BIN).
+
+```bash
+GET https://api.revtain.com/api/lookup/bin/{prefix}
+```
+
+**Example:**
+
+```bash
+curl https://api.revtain.com/api/lookup/bin/414720
+```
+
+**Response:**
+
+```json
+{
+  "prefix": "414720",
+  "issuerName": "Chase",
+  "issuerCountry": "US",
+  "cardNetwork": "visa",
+  "cardType": "credit"
+}
+```
+
+**Response fields:**
+
+| Field | Type | Description |
+|---|---|---|
+| `prefix` | string | The BIN prefix you queried (4–8 digits). |
+| `issuerName` | string | The bank that issued the card, e.g. `Chase`, `Barclays`, `Nubank`. `Unknown` when not identifiable. |
+| `issuerCountry` | string | ISO-3166-1 alpha-2 country code, e.g. `US`, `GB`, `BR`. `Unknown` when not identifiable. |
+| `cardNetwork` | string | One of `visa`, `mastercard`, `amex`, `discover`, `unknown`. |
+| `cardType` | string | One of `credit`, `debit`, `prepaid`, `unknown`. |
+
+**Errors:**
+
+- `400 Bad Request` — prefix is not 4–8 digits.
+
+## Decline Code Lookup
+
+Translate any gateway-specific decline code into Revtain's canonical taxonomy with a plain-English explanation.
+
+```bash
+GET https://api.revtain.com/api/lookup/decline/{gateway}/{code}
+```
+
+`{gateway}` must be one of: `stripe`, `braintree`, `adyen`, `checkout`, `authnet`, `dlocal`, `worldpay`, `razorpay`, `paystack`.
+
+**Example:**
+
+```bash
+curl https://api.revtain.com/api/lookup/decline/braintree/2010
+```
+
+**Response:**
+
+```json
+{
+  "gateway": "braintree",
+  "gatewayLabel": "Braintree",
+  "rawCode": "2010",
+  "canonicalCode": "insufficient_funds",
+  "category": "soft",
+  "plainEnglish": "The customer's account is short on funds. Retry near payday (typically the 1st or 15th of the month).",
+  "variantsOnOtherGateways": [
+    { "gateway": "stripe", "gatewayLabel": "Stripe", "rawCode": "insufficient_funds" },
+    { "gateway": "adyen", "gatewayLabel": "Adyen", "rawCode": "Not enough balance" },
+    { "gateway": "authnet", "gatewayLabel": "Authorize.net", "rawCode": "51" }
+  ]
+}
+```
+
+**Response fields:**
+
+| Field | Type | Description |
+|---|---|---|
+| `gateway` | string | The gateway slug you queried. |
+| `rawCode` | string | The raw code you queried. |
+| `canonicalCode` | string | Revtain's canonical taxonomy code (e.g. `insufficient_funds`, `do_not_honor`, `expired_card`). |
+| `category` | string | One of `hard`, `soft`, `fraud`, `technical`, `auth_required`, `unknown`. |
+| `plainEnglish` | string | A short, merchant-facing explanation of what this decline means. |
+| `variantsOnOtherGateways` | array | The same decline reason as it appears on other gateways. Useful for cross-gateway debugging. |
+
+## Full Decline Code Dictionary
+
+Pull the entire decline-code dictionary in one call — 480+ codes across 9 gateways, grouped by canonical category.
+
+```bash
+GET https://api.revtain.com/api/lookup/decline-codes
+```
+
+**Response (truncated):**
+
+```json
+{
+  "canonicalCount": 43,
+  "variantCount": 482,
+  "gatewayCount": 9,
+  "gatewayCounts": {
+    "stripe": 65,
+    "braintree": 62,
+    "adyen": 88,
+    "authnet": 89,
+    "checkout": 75,
+    "dlocal": 35,
+    "worldpay": 34,
+    "razorpay": 24,
+    "paystack": 10
+  },
+  "codes": [
+    {
+      "canonicalCode": "insufficient_funds",
+      "category": "soft",
+      "plainEnglish": "The customer's account is short on funds...",
+      "variants": [
+        { "gateway": "stripe", "gatewayLabel": "Stripe", "rawCode": "insufficient_funds" },
+        { "gateway": "braintree", "gatewayLabel": "Braintree", "rawCode": "2010" }
+      ]
+    }
+  ]
+}
+```
+
+Best fetched once on app startup and cached client-side — the dictionary changes infrequently.
+
+## Use cases
+
+- **Internal debug dashboards** — show your support team a plain-English meaning for every decline the gateway returned.
+- **Customer support scripts** — let agents type in a raw code from a transaction log and immediately see what to tell the customer.
+- **Fraud / risk screens** — enrich a transaction view with `issuerName` and `issuerCountry` without integrating a paid BIN service.
+- **Engineering** — wire the canonical decline taxonomy into your own retry logic if you don't use Revtain for everything.
+
+## Rate limits
+
+There are no per-key rate limits on these endpoints (they take no auth). We ask that you cache responses where reasonable — the underlying data updates infrequently:
+
+- BIN responses can be safely cached for 24 hours per prefix.
+- Decline-code responses can be safely cached indefinitely; the dictionary changes only when we add new gateway support.
+
+If you anticipate calling at high volume (above a few requests per second sustained), [get in touch](https://revtain.com/contact) so we can plan capacity.

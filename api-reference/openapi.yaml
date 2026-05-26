@@ -102,6 +102,19 @@ components:
           format: email
           description: The end customer's email address. Required if dunning is enabled.
           example: customer@example.com
+        paymentMethodType:
+          type: string
+          enum: [card, apple_pay, google_pay, paypal, venmo]
+          default: card
+          description: |
+            How the customer originally paid. Lets Revtain apply the right recovery
+            strategy per rail — wallets get a higher predicted-recovery score and
+            skip cascades to gateways that don't support recurring wallet charges.
+
+            Defaults to `card` when omitted. Always pass this if the failed payment
+            originated via Apple Pay, Google Pay, PayPal, or Venmo — recovery rates
+            are materially higher when set correctly.
+          example: apple_pay
         simulateOutcome:
           type: string
           enum: [success, failed, blocked]

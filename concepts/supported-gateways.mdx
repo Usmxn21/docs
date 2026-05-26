@@ -1,0 +1,64 @@
+---
+title: "Supported Gateways"
+description: "Every payment gateway Revtain integrates with — and what to pass in your webhook for each."
+---
+
+Revtain recovers failed payments on every major payment gateway. There's nothing for you to install at the gateway side — you continue using your existing gateway exactly as you do today. Revtain receives your failure webhook, looks up the stored payment token at your gateway, and runs the retry there.
+
+## Gateways with native direct integration
+
+The gateways listed below have first-class adapters inside Revtain. When recovery runs on one of these, the engine calls the gateway's API directly using your existing merchant credentials — no intermediate vault, no third-party token translation.
+
+| Gateway | Region focus | Token format you pass in `paymentMethodToken` |
+|---|---|---|
+| **Stripe** | Global | `pm_xxx` (PaymentMethod ID) — works for cards, Apple Pay, Google Pay |
+| **Adyen** | Global | `<merchantAccount>\|<storedPaymentMethodId>\|<shopperReference>` |
+| **Braintree** | Global | `<paymentMethodToken>\|<customerId>` |
+| **Checkout.com** | Global, strong EU / MENA | `src_xxx` (saved instrument token) |
+| **WorldPay** (Access Worldpay) | Global, strong UK | `<entityRef>\|<cardOnFileToken>` |
+| **Authorize.net** | US (SMB) | `<customerProfileId>:<customerPaymentProfileId>` |
+| **Razorpay** | India | `<tokenId>\|<customerId>\|<email>\|<contact>` |
+| **dLocal** | LATAM (BR, MX, AR, CO, CL, PE) | `<cardToken>\|<payerId>\|<email>\|<documentId>` |
+| **Paystack** | Africa (NG, GH, KE, ZA) | `<authorizationCode>\|<customerEmail>` |
+
+<Note>
+  Each gateway has its own token format. The token you pass in `paymentMethodToken` must be the one the gateway itself issued — Revtain does not transform tokens between gateways. If you're integrating from a billing platform connector (Stripe Billing, Chargebee, Recurly, etc.), the connector handles token mapping for you.
+</Note>
+
+## Credentials you provide
+
+When you onboard with Revtain, you provide the API credentials for the gateway(s) you use. Credentials are encrypted at rest and only ever decrypted in-process at retry time.
+
+| Gateway | What we need from you |
+|---|---|
+| Stripe | Secret API key (`sk_live_...`) |
+| Adyen | API key + merchant account name + (live URL prefix for live mode) |
+| Braintree | Public key + Private key |
+| Checkout.com | Secret API key (`sk_...`) |
+| WorldPay | Access Worldpay username + password + entity reference |
+| Authorize.net | API Login ID + Transaction Key |
+| Razorpay | Key ID + Key Secret |
+| dLocal | X-Login + Secret key |
+| Paystack | Secret key (`sk_live_...`) |
+
+## Multiple gateways (cascade)
+
+If you use more than one gateway, Revtain can cascade between them — if the primary gateway gives up on a recoverable charge, the same payment retries on a backup gateway with different acquirer risk rules.
+
+Cascade works automatically when you configure backup gateways at onboarding. Token portability across gateways depends on the token type:
+
+- **Card tokens** — gateway-locked. A Stripe `pm_xxx` cannot be charged on Adyen. Cross-gateway cascade for raw card tokens is not possible without the gateway also holding the universal card credential.
+- **Wallet tokens** (Apple Pay, Google Pay) — always gateway-locked. The wallet sheet bound the token to the gateway that received it at checkout time.
+- **PayPal** — always single-gateway by definition (PayPal is its own closed loop).
+
+For most clients with one primary gateway, cascade is not needed; Revtain's strategy work happens within that gateway.
+
+## Don't see your gateway?
+
+Revtain is built so that adding a new gateway is a small, well-defined unit of work — typically a few days from request to live. If you're on a gateway not listed above, [get in touch](https://revtain.com/contact) and we'll add it to the roadmap.
+
+## Billing platform connectors
+
+If you're using a billing platform that sits *on top of* a gateway, you don't need to integrate directly. The connector listens to your billing platform's webhooks and translates them into Revtain recoveries — see [Connectors](/guides/connectors).
+
+Supported today: **Stripe Billing**, **Braintree Subscriptions**, **Chargebee**, **Recurly**, **Zuora**, **Shopify Recharge**.

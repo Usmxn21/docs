@@ -34,13 +34,15 @@
               "guides/in-app-paywall",
               "guides/testing",
               "guides/integration-checklist",
-              "guides/troubleshooting"
+              "guides/troubleshooting",
+              "guides/developer-tools"
             ]
           },
           {
             "group": "Concepts",
             "pages": [
               "concepts/decline-codes",
+              "concepts/supported-gateways",
               "concepts/security"
             ]
           }
