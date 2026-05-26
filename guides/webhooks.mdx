@@ -193,12 +193,23 @@ Sent when a customer updates their payment method via a hosted card update link.
   "event": "card.updated",
   "oldPaymentMethodToken": "pm_oldcard123",
   "newPaymentMethodToken": "pm_newcard456",
+  "paymentMethodType": "apple_pay",
+  "eligibleGateways": ["stripe", "adyen"],
   "clientId": "da646dba-ce56-4483-ad0a-2a4fac54a5e2",
   "timestamp": "2026-04-20T14:30:00.000Z"
 }
 ```
 
-**Action:** Store `newPaymentMethodToken` against the customer record in your system. Use it as the `paymentMethodToken` in all future `POST /api/recovery/execute` calls for this customer. The old token is no longer valid for recovery — discard it.
+| Field | Type | Description |
+|---|---|---|
+| `oldPaymentMethodToken` | string | The token that was dead and triggered the update flow. Stop using it. |
+| `newPaymentMethodToken` | string | The new gateway-native token. Use this on all future recovery calls. |
+| `paymentMethodType` | string | `card`, `apple_pay`, `google_pay`, `paypal`, or `venmo` — what the customer chose on the update page. Pass this back as `paymentMethodType` on future `/api/recovery/execute` calls so the engine applies the right strategy. |
+| `eligibleGateways` | string[] | The list of your configured gateways the new token can be charged on. For card tokens this is usually every gateway; for wallet tokens it's gateway-locked (the wallet sheet binds the token to whichever gateway received it). |
+| `clientId` | string | Your Revtain client ID — same value Revtain assigned at onboarding. |
+| `timestamp` | string | ISO 8601 timestamp of the update event. |
+
+**Action:** Store `newPaymentMethodToken` and `paymentMethodType` against the customer record in your system. Use them on all future `POST /api/recovery/execute` calls for this customer. The old token is no longer valid for recovery — discard it.
 
 <Note>
   `newPaymentMethodToken` is a gateway-native token (for example a Stripe `pm_xxx` or a Checkout.com `src_xxx`), issued by the same gateway that holds the customer's account. You can pass it to your gateway directly as well — it's a real gateway token, not a Revtain reference.
@@ -222,6 +233,75 @@ Sent when the pre-failure risk prediction engine detects a high-risk payment **b
 ```
 
 **Action:** Consider reaching out to the customer to update their payment method before the next billing cycle. Generate a card update link via [`/api/recovery/update-card/generate`](/api-reference/endpoint/generate-card-update-link).
+
+---
+
+### `recovery.skipped_high_risk`
+
+Sent when the predictor scored the failure so low that attempting recovery would burn issuer velocity budget without a realistic chance of success. Revtain skips the retry entirely and surfaces a pre-generated card update link so you can route the customer straight to re-entering payment details.
+
+```json
+{
+  "event": "recovery.skipped_high_risk",
+  "paymentMethodToken": "pm_1234567890",
+  "amount": 5000,
+  "currency": "USD",
+  "riskScore": 92,
+  "confidence": 88,
+  "reasoning": "Card has 5 prior hard declines in the last 7 days and the predicted retry success probability is below the configured threshold.",
+  "cardUpdateUrl": "https://pay.yourdomain.com/api/recovery/update-card/abc123xyz",
+  "skippedChargeId": "skip_a1b2c3d4",
+  "timestamp": "2026-04-20T14:30:00.000Z"
+}
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `riskScore` | number | 0–100, where higher = more likely to fail. The configured skip threshold lives on your client record. |
+| `confidence` | number | 0–100 confidence in the prediction. Useful for filtering — a high score with low confidence is a weaker signal. |
+| `reasoning` | string | Human-readable explanation of why this card was skipped. |
+| `cardUpdateUrl` | string | A ready-to-send card update link the customer can use to provide new credentials. |
+| `skippedChargeId` | string | Internal ID for the skip event — quote this if you need to ask support about a specific decision. |
+
+**Action:** Send the `cardUpdateUrl` to the customer via your existing channel (email, in-app message). Treating a skip as "the recovery failed" lets you maintain a clean state machine in your dunning logic.
+
+<Tip>
+  This event is additive — older integrations that don't handle it can safely ignore it. The same skip also fires Revtain's normal dunning hooks, so you don't need to wire `recovery.skipped_high_risk` unless you want richer telemetry on why a particular charge was skipped.
+</Tip>
+
+---
+
+### `recovery.proactive_retention`
+
+Sent when Revtain detects that a single customer has hit multiple recovery failures in a short window — a strong signal they're at risk of churning. The event carries a pre-generated cancel-flow URL you can offer the customer to retain them with a pause, discount, or downgrade option *before* they actively cancel.
+
+```json
+{
+  "event": "recovery.proactive_retention",
+  "customerEmail": "customer@example.com",
+  "recentFailureCount": 3,
+  "cancelFlowUrl": "https://pay.yourdomain.com/api/cancel-flow/abc123xyz",
+  "cancelFlowToken": "abc123xyz",
+  "amount": 2900,
+  "currency": "USD",
+  "reason": "Customer has had repeated recovery failures. Send this link via your existing channel to offer retention options before they churn.",
+  "timestamp": "2026-04-20T14:30:00.000Z"
+}
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `customerEmail` | string | The customer whose failure pattern triggered the proactive retention flag. |
+| `recentFailureCount` | number | How many failed recoveries this customer has had in the recent window. |
+| `cancelFlowUrl` | string | A hosted cancel-flow URL the customer can use to pause, downgrade, or cancel — your retention surface for at-risk customers. |
+| `cancelFlowToken` | string | The raw token (same one embedded in `cancelFlowUrl`) so you can build your own page if you'd rather host it yourself. |
+| `reason` | string | Plain-language explanation of why this was triggered — safe to surface in internal dashboards. |
+
+**Action:** Send `cancelFlowUrl` to the customer via your existing channel. Customers who reach this link voluntarily are dramatically more likely to retain (via pause / downgrade) than customers who are forced through the dunning gauntlet first. Requires the cancel-flow feature to be enabled on your account.
+
+<Note>
+  `recovery.proactive_retention` is only fired for clients with the cancel-flow feature enabled. If you don't use cancel flow today, this event never fires — you can safely ignore it.
+</Note>
 
 ---
 
