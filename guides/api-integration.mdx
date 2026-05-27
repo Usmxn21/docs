@@ -82,7 +82,12 @@ app.post('/your-backend/charge', async (req, res) => {
       // Set when the failed charge came from Apple Pay / Google Pay / PayPal.
       // Defaults to 'card' if omitted. Wallet payments get a higher predicted
       // recovery score, so passing this correctly meaningfully lifts results.
-      paymentMethodType: payment.paymentMethodType || 'card'
+      paymentMethodType: payment.paymentMethodType || 'card',
+      // Optional: pass any alternative payment tokens you hold for this
+      // customer (e.g. a backup card-on-file when the primary is a wallet).
+      // Revtain tries each in order if the primary's cascade exhausts on a
+      // recoverable decline. Up to 5 supported. No orchestration code needed.
+      fallbackPaymentMethodTokens: payment.fallbackTokens || []
     })
   });
 
@@ -145,7 +150,11 @@ def charge():
             'idempotencyKey': f'order_{order_id}_recovery',
             # Set to 'apple_pay', 'google_pay', 'paypal', or 'venmo' when the
             # failed charge came from a wallet. Defaults to 'card' if omitted.
-            'paymentMethodType': data.get('paymentMethodType', 'card')
+            'paymentMethodType': data.get('paymentMethodType', 'card'),
+            # Optional: alternative tokens for the same customer. Revtain
+            # tries each in order if the primary's cascade exhausts on a
+            # recoverable decline. Up to 5 supported.
+            'fallbackPaymentMethodTokens': data.get('fallbackTokens', [])
         }
     )
 
@@ -192,6 +201,10 @@ The only requirement is that you have the customer's payment token from your gat
 
 <Tip>
   **Apple Pay / Google Pay / PayPal customers.** Any gateway-native token works — including the `pm_xxx` tokens Stripe issues for Apple Pay and Google Pay charges. Pass the wallet identifier in `paymentMethodType` (`apple_pay`, `google_pay`, `paypal`, or `venmo`) so the recovery engine applies the right strategy. Recovery rates on wallet payments are materially higher when this field is set correctly — wallet tokens ride network tokens with built-in cryptograms, which the predictor weights accordingly.
+</Tip>
+
+<Tip>
+  **Customers with more than one stored payment method.** Pass any alternative tokens you hold in `fallbackPaymentMethodTokens`. If the primary token's gateway cascade exhausts on a recoverable decline, Revtain tries each fallback in order automatically — no orchestration code on your side. Common use: wallet primary + backup card-on-file. Up to 5 fallback tokens supported.
 </Tip>
 
 ## Optional: Pre-Screening Risky Payments

@@ -69,6 +69,28 @@ components:
           type: string
           description: "Your gateway's payment token (e.g., Stripe `pm_xxx`, `tok_xxx`, Checkout.com `src_xxx`). Apple Pay and Google Pay tokens issued by your gateway work the same way as card tokens."
           example: pm_1234567890
+        fallbackPaymentMethodTokens:
+          type: array
+          maxItems: 5
+          items:
+            type: string
+          description: |
+            Optional list of alternative payment tokens for the same customer
+            (for example, a backup card-on-file when the primary is a wallet).
+            When the primary token's gateway cascade exhausts on a recoverable
+            decline (insufficient funds, do not honor, gateway timeout, and
+            similar), Revtain automatically tries each fallback token in
+            order — no orchestration code on your side.
+
+            Tokens that fail with hard cardholder-state declines (lost,
+            stolen, fraud, expired) skip the fallback step, because the
+            issuer's flag applies to the cardholder rather than the
+            individual token.
+
+            Pass the tokens in priority order. Up to 5 supported.
+          example:
+            - pm_card_backup_5678
+            - pm_secondary_card_9012
         amount:
           type: integer
           minimum: 50

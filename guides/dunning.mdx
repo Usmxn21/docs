@@ -1,34 +1,119 @@
 ---
 title: "Dunning Sequences"
-description: "How Revtain's dunning works — webhook-driven, no customer-facing emails from Revtain."
+description: "Wire it once. Every future recovery failure routes through your domain automatically."
 ---
 
-When `dunningEnabled` is set to `true`, Revtain sends a `recovery.failed` webhook to your system whenever the recovery engine exhausts all strategies. **This is the default — one webhook, no spam.**
+Dunning is webhook-driven. Revtain hands you a one-tap card-update URL the moment a recovery exhausts retries. Your existing email, SMS, or push infrastructure delivers it — from your domain, with your branding. Wire the integration once; every failure after that runs automatically.
 
 <Info>
-  **Revtain does not send customer-facing emails or SMS.** Dunning is webhook-only — your system handles customer communication on your domain, with your branding. This keeps you in control of the customer relationship.
+  **Revtain does not send customer-facing emails or SMS.** Customers trust messages from the merchant they signed up with. Deliverability and brand-trust both win when the message comes from your domain rather than a recovery vendor.
 </Info>
 
-## How It Works
+## Using a billing platform? Zero dunning code.
+
+Clients on **Chargebee**, **Stripe Billing**, **Recurly**, **Braintree Subscriptions**, **Zuora**, or **Shopify Recharge** ship dunning with no extra integration. The connector receives recovery outcomes from Revtain and dispatches branded emails through the platform's existing sender configuration — already pointed at your domain.
+
+Configure the connector webhook URL once during onboarding. Everything else runs through your billing platform's own dunning engine, using the templates, schedule, and sender address you've already set up there.
+
+## Direct-API clients: ship the handler once
+
+Write a single webhook endpoint that reads `cardUpdateUrl` from the `recovery.failed` payload and hands it to your existing email, SMS, or push infrastructure. After that, every future failure routes through your domain automatically. No per-event work.
+
+The handler is short. Below are two ready-to-paste examples — drop into your backend, change the email-send call to your provider, and you're done.
+
+<CodeGroup>
+
+```javascript Node.js (Express)
+import express from 'express';
+import crypto from 'crypto';
+
+const app = express();
+
+// Required for HMAC signature verification — keep the raw body.
+app.post('/webhooks/revtain', express.raw({ type: 'application/json' }), async (req, res) => {
+  // 1. Verify the webhook came from Revtain.
+  const signature = req.header('X-Revtain-Signature');
+  const expected = crypto
+    .createHmac('sha256', process.env.REVTAIN_WEBHOOK_SECRET)
+    .update(req.body)
+    .digest('hex');
+  if (signature !== expected) return res.status(401).end();
+
+  const event = JSON.parse(req.body.toString());
+
+  // 2. Route on event type.
+  if (event.event === 'recovery.failed') {
+    await yourEmailProvider.send({
+      from: 'billing@yourdomain.com',
+      to: event.customerEmail,
+      template: 'payment-failed',
+      vars: { updateUrl: event.cardUpdateUrl, amount: event.amount },
+    });
+  }
+
+  res.json({ received: true });
+});
+```
+
+```python Python (Flask)
+import os, hmac, hashlib, json
+from flask import Flask, request, abort, jsonify
+
+app = Flask(__name__)
+
+@app.post('/webhooks/revtain')
+def revtain_webhook():
+    # 1. Verify the webhook came from Revtain.
+    raw = request.get_data()
+    expected = hmac.new(
+        os.environ['REVTAIN_WEBHOOK_SECRET'].encode(),
+        raw,
+        hashlib.sha256,
+    ).hexdigest()
+    if not hmac.compare_digest(request.headers.get('X-Revtain-Signature', ''), expected):
+        abort(401)
+
+    event = json.loads(raw)
+
+    # 2. Route on event type.
+    if event.get('event') == 'recovery.failed':
+        your_email_provider.send(
+            from_addr='billing@yourdomain.com',
+            to=event['customerEmail'],
+            template='payment-failed',
+            vars={'updateUrl': event['cardUpdateUrl'], 'amount': event['amount']},
+        )
+
+    return jsonify(received=True)
+```
+
+</CodeGroup>
+
+That is the entire integration. The endpoint runs forever — every future recovery failure for every customer fires it.
+
+## What happens end to end
 
 <Steps>
-  <Step title="Recovery engine exhausts available retry paths">
-    Payment fails after intelligent retries on the gateway that issued the original token.
+  <Step title="Recovery engine exhausts retries">
+    The payment ran through the available retry paths on the gateway that issued the original token. None succeeded.
   </Step>
-  <Step title="Your system receives a recovery.failed webhook">
-    Includes full transaction details, decline code, strategy used.
+  <Step title="Your webhook fires">
+    `recovery.failed` arrives at your endpoint with the full payload — decline code, recommended action, and a ready-to-send `cardUpdateUrl`.
   </Step>
-  <Step title="Your system decides what to do">
-    Flag the invoice, trigger your own dunning, generate a [card update link](/guides/card-update-links), etc.
+  <Step title="Your existing infrastructure delivers the message">
+    Your handler hands the URL to your email/SMS/push provider. The customer receives a message from your domain, branded as your business.
   </Step>
-  <Step title="If the payment is later recovered">
-    Manual retry, card update, or account updater — any pending dunning steps are cancelled automatically.
+  <Step title="Customer updates their payment method">
+    They tap the link, land on your branded card-update page, and provide new credentials. You receive a `card.updated` webhook with the new token.
+  </Step>
+  <Step title="Recovery completes automatically">
+    Manual retry, the new card on file, or Account Updater closes the loop. Any pending follow-ups cancel automatically.
   </Step>
 </Steps>
 
-## Opt-In Email/SMS Alerts (For You, Not Customers)
+## Operator alerts (for your team)
 
-If you want Revtain to also notify **you** (the merchant) via email or SMS when recoveries fail, add those channels during onboarding:
+If you want Revtain to notify your team — not your customer — when a recovery fails, add those channels during onboarding:
 
 ```json
 {
@@ -36,26 +121,10 @@ If you want Revtain to also notify **you** (the merchant) via email or SMS when 
 }
 ```
 
-These alerts go to **you**, not your customer. They're informational — *"a $25.00 payment failed, consider reaching out to the customer."*
+These alerts go to you, not the customer. Informational only: *a $25.00 payment failed, consider reviewing the account.*
 
-## Recommended Workflow
+## Why webhook-only
 
-<Steps>
-  <Step title="Receive recovery.failed webhook">
-    From Revtain.
-  </Step>
-  <Step title="Generate a card update link">
-    Call `POST /api/recovery/update-card/generate` to create a secure URL.
-  </Step>
-  <Step title="Send the URL to your customer">
-    Via **your own** email/SMS system — your domain, your branding.
-  </Step>
-  <Step title="Customer updates their card">
-    You receive a `card.updated` webhook.
-  </Step>
-  <Step title="Retry the payment">
-    Call `POST /api/recovery/execute` with the new token.
-  </Step>
-</Steps>
+Customer-facing email from a third-party recovery vendor lands in promotions or spam — the customer never opted into hearing from us, only from you. Email from your domain lands in the inbox. The webhook handoff keeps your sender reputation intact, your brand on every message, and your team in control of timing, copy, and channel.
 
-This keeps you in control of the customer relationship. Revtain handles the recovery engine and provides the tools — you handle the customer communication.
+Revtain runs the recovery engine. You run the customer relationship.
