@@ -20,6 +20,10 @@ The gateways listed below have first-class adapters inside Revtain. When recover
 | **Razorpay** | India | `<tokenId>\|<customerId>\|<email>\|<contact>` |
 | **dLocal** | LATAM (BR, MX, AR, CO, CL, PE) | `<cardToken>\|<payerId>\|<email>\|<documentId>` |
 | **Paystack** | Africa (NG, GH, KE, ZA) | `<authorizationCode>\|<customerEmail>` |
+| **Cybersource** | Global, US enterprise focus | `<customerId>:<paymentInstrumentId>` (Token Management Service) |
+| **PayPal** | Global | `billing-agreement\|<BA-token>` or `reference\|<previous-payment-id>` |
+| **GoCardless** | Direct debit on ACH, SEPA, BACS, BECS, PAD | `<mandateId>` (MD-xxx) |
+| **Mollie** | EU SMB (NL, DE, FR, BE) | `<customerId>:<mandateId>` |
 
 <Note>
   Each gateway has its own token format. The token you pass in `paymentMethodToken` must be the one the gateway itself issued — Revtain does not transform tokens between gateways. If you're integrating from a billing platform connector (Stripe Billing, Chargebee, Recurly, etc.), the connector handles token mapping for you.
@@ -40,6 +44,10 @@ When you onboard with Revtain, you provide the API credentials for the gateway(s
 | Razorpay | Key ID + Key Secret |
 | dLocal | X-Login + Secret key |
 | Paystack | Secret key (`sk_live_...`) |
+| Cybersource | Merchant ID + API Key ID + Shared Secret |
+| PayPal | Client ID + Client Secret (live or sandbox) |
+| GoCardless | Access Token (live or sandbox) |
+| Mollie | API Key (`live_xxx` or `test_xxx`) |
 
 ## Multiple gateways (cascade)
 

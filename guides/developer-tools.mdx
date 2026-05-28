@@ -55,7 +55,7 @@ Translate any gateway-specific decline code into Revtain's canonical taxonomy wi
 GET https://api.revtain.com/api/lookup/decline/{gateway}/{code}
 ```
 
-`{gateway}` must be one of: `stripe`, `braintree`, `adyen`, `checkout`, `authnet`, `dlocal`, `worldpay`, `razorpay`, `paystack`.
+`{gateway}` must be one of: `stripe`, `braintree`, `adyen`, `checkout`, `authnet`, `dlocal`, `worldpay`, `razorpay`, `paystack`, `cybersource`, `paypal`, `gocardless`, `mollie`.
 
 **Example:**
 
@@ -105,8 +105,8 @@ GET https://api.revtain.com/api/lookup/decline-codes
 ```json
 {
   "canonicalCount": 43,
-  "variantCount": 482,
-  "gatewayCount": 9,
+  "variantCount": 500,
+  "gatewayCount": 13,
   "gatewayCounts": {
     "stripe": 65,
     "braintree": 62,
@@ -116,7 +116,11 @@ GET https://api.revtain.com/api/lookup/decline-codes
     "dlocal": 35,
     "worldpay": 34,
     "razorpay": 24,
-    "paystack": 10
+    "paystack": 10,
+    "cybersource": 5,
+    "paypal": 5,
+    "gocardless": 3,
+    "mollie": 5
   },
   "codes": [
     {
@@ -125,7 +129,8 @@ GET https://api.revtain.com/api/lookup/decline-codes
       "plainEnglish": "The customer's account is short on funds...",
       "variants": [
         { "gateway": "stripe", "gatewayLabel": "Stripe", "rawCode": "insufficient_funds" },
-        { "gateway": "braintree", "gatewayLabel": "Braintree", "rawCode": "2010" }
+        { "gateway": "braintree", "gatewayLabel": "Braintree", "rawCode": "2010" },
+        { "gateway": "gocardless", "gatewayLabel": "GoCardless", "rawCode": "insufficient_funds" }
       ]
     }
   ]
