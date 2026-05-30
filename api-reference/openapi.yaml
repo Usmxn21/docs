@@ -67,7 +67,20 @@ components:
       properties:
         paymentMethodToken:
           type: string
-          description: "Your gateway's payment token (e.g., Stripe `pm_xxx`, `tok_xxx`, Checkout.com `src_xxx`). Apple Pay and Google Pay tokens issued by your gateway work the same way as card tokens."
+          description: |
+            Your gateway's payment token. Format varies per gateway — see the full
+            per-gateway token-format table at
+            [Supported Gateways](/concepts/supported-gateways).
+
+            Common examples:
+              - **Stripe**: `pm_xxx` (PaymentMethod ID) — works for cards, Apple Pay, Google Pay
+              - **Checkout.com**: `src_xxx` (saved instrument token)
+              - **Adyen**: `<merchantAccount>|<storedPaymentMethodId>|<shopperReference>`
+              - **Braintree**: `<paymentMethodToken>|<customerId>`
+              - **GoCardless**: `<mandateId>` (MD-xxx)
+              - **PayPal**: `billing-agreement|<BA-token>` or `reference|<previous-payment-id>`
+
+            Apple Pay and Google Pay tokens issued by your gateway work the same way as card tokens — pass them as the underlying gateway token, and set `paymentMethodType` to identify the wallet.
           example: pm_1234567890
         fallbackPaymentMethodTokens:
           type: array
@@ -401,7 +414,7 @@ components:
       properties:
         paymentMethodToken:
           type: string
-          description: "Your gateway's payment token (e.g., Stripe `pm_xxx`)."
+          description: "Your gateway's payment token. Format varies per gateway — see [Supported Gateways](/concepts/supported-gateways) for the per-gateway format table covering all 13 supported processors."
           example: pm_1234567890
         amount:
           type: integer
