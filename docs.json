@@ -25,6 +25,7 @@
           {
             "group": "Integration",
             "pages": [
+              "guides/integration-paths",
               "guides/connectors",
               "guides/api-integration",
               "guides/webhooks",
@@ -43,6 +44,7 @@
             "pages": [
               "concepts/decline-codes",
               "concepts/supported-gateways",
+              "concepts/proof-mode",
               "concepts/security"
             ]
           }

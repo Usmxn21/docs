@@ -1,0 +1,65 @@
+---
+title: "Proof Mode"
+description: "Optional measured rollout: a control group isolates Revtain's true contribution, reported with confidence intervals."
+---
+
+Most recovery vendors report a recovery rate and ask you to take the uplift on faith — payments that would have come back anyway get counted as wins. Proof Mode removes the faith. It is an optional program, off by default, switched on only with your written agreement.
+
+## How it works
+
+When Proof Mode is active, a fixed slice of your failed payments (typically 10%, never more than half) is randomly assigned to a **control group**. For those payments Revtain makes no recovery attempt of any kind — your standard failed-payment process runs exactly as it would without Revtain. Every other payment gets the full recovery engine.
+
+Because assignment is random and sticky per customer, the two groups differ in only one respect: whether Revtain acted. Comparing them isolates Revtain's true contribution.
+
+Your monthly report then carries a **Proof of Lift** section:
+
+- Recovery rate with Revtain vs the control group's natural recovery rate
+- The uplift in percentage points, with a 95% confidence interval
+- A significance verdict computed with a standard two-proportion test — the same statistics an A/B testing platform uses
+
+<Note>
+  The report is honest by construction. While sample sizes are small it says "measurement in progress" — it never declares significance the data doesn't support, no matter how large the raw difference looks. Control invoices are given a 30-day observation window before being counted, so slow self-recoveries are credited to the control group, not to Revtain.
+</Note>
+
+## What your engineers handle
+
+One thing: a new webhook event.
+
+### `recovery.holdout`
+
+Sent immediately when a recovery request lands in the control group. No attempt was made; none will be.
+
+```json
+{
+  "event": "recovery.holdout",
+  "clientId": "da646dba-ce56-4483-ad0a-2a4fac54a5e2",
+  "paymentMethodToken": "pm_1234567890",
+  "amount": 4900,
+  "currency": "USD",
+  "customerEmail": "customer@example.com",
+  "message": "Proof mode control group: Revtain made no recovery attempt for this payment. Proceed with your standard failed-payment process.",
+  "timestamp": "2026-06-13T10:15:00.000Z"
+}
+```
+
+**Action:** run whatever your failed-payment handling was before Revtain — your own dunning emails, your own retry, or nothing. The point of the control group is that these payments get your status-quo treatment.
+
+The synchronous API response for a held-out request is also explicit:
+
+```json
+{
+  "success": false,
+  "holdout": true,
+  "transactionId": null,
+  "message": "Proof mode: this payment is in the measurement control group. No recovery was attempted — handle it exactly as you would without Revtain."
+}
+```
+
+If your integration only checks `success`, nothing breaks — a holdout reads as a failed recovery and your existing failure path runs, which is precisely the correct behaviour. The `holdout` field exists so you can distinguish the two in your own records if you want to.
+
+## Things worth knowing
+
+- **The same customer always lands in the same group.** Re-submitting a request can never move a customer from control to treatment, so the measurement cannot be contaminated — accidentally or otherwise.
+- **The control slice is bounded.** The percentage is agreed up front and the engine hard-caps it at 50%; a configuration error cannot quietly hold out the bulk of your recoverable revenue.
+- **You can stop any time.** Switching Proof Mode off returns 100% of traffic to full recovery on the next request. The accumulated measurement remains in your reports.
+- **The cost of proof is real but finite.** Payments in the control group recover at your baseline rate, not Revtain's. That foregone recovery is the price of a defensible number — most clients run Proof Mode for one or two billing cycles, bank the evidence, then switch to full coverage.

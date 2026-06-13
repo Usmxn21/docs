@@ -127,6 +127,10 @@ Sent when a previously failed payment has been successfully recovered.
 
 **Action:** Mark the customer's invoice as paid in your billing system.
 
+<Note>
+  `recovery.success` and `recovery.failed` may carry an optional `trigger` field identifying what produced the outcome — for example a scheduled retry, or `"reconciliation"` when Revtain's automatic reconciliation resolved a payment whose original gateway response was lost in transit. Handle both events the same way regardless of `trigger`; the field exists for your telemetry.
+</Note>
+
 ---
 
 ### `recovery.failed`
@@ -271,6 +275,27 @@ Sent when the predictor scored the failure so low that attempting recovery would
 
 ---
 
+### `recovery.holdout`
+
+Sent only on accounts running [Proof Mode](/concepts/proof-mode). The request landed in the measurement control group: Revtain made no recovery attempt and will not make one.
+
+```json
+{
+  "event": "recovery.holdout",
+  "clientId": "da646dba-ce56-4483-ad0a-2a4fac54a5e2",
+  "paymentMethodToken": "pm_1234567890",
+  "amount": 4900,
+  "currency": "USD",
+  "customerEmail": "customer@example.com",
+  "message": "Proof mode control group: Revtain made no recovery attempt for this payment. Proceed with your standard failed-payment process.",
+  "timestamp": "2026-06-13T10:15:00.000Z"
+}
+```
+
+**Action:** run your standard failed-payment process for this payment — exactly what you did before Revtain. If your integration doesn't handle this event, nothing breaks: the synchronous API response for held-out requests reports `success: false`, so your existing failure path already does the right thing.
+
+---
+
 ### `recovery.proactive_retention`
 
 Sent when Revtain detects that a single customer has hit multiple recovery failures in a short window — a strong signal they're at risk of churning. The event carries a pre-generated cancel-flow URL you can offer the customer to retain them with a pause, discount, or downgrade option *before* they actively cancel.
@@ -326,6 +351,27 @@ Sent by a billing-platform connector ahead of a renewal when the customer's card
 <Note>
   Connectors for some platforms include extra context — for example, the Stripe Billing connector also sends `upcomingInvoiceAmount` and `currency`. Treat any additional fields as optional.
 </Note>
+
+#### Pre-emptive variant (card health sweep)
+
+Accounts with the card health sweep enabled also receive `card.expiring_soon` from Revtain's own monitoring — a routine background check of active cards, independent of any billing platform. This variant is marked `preemptive: true` and includes a ready-made card-update link:
+
+```json
+{
+  "event": "card.expiring_soon",
+  "clientId": "da646dba-ce56-4483-ad0a-2a4fac54a5e2",
+  "paymentMethodToken": "pm_1234567890",
+  "customerEmail": "customer@example.com",
+  "expiryMonth": 7,
+  "expiryYear": 2026,
+  "cardUpdateUrl": "https://pay.yourdomain.com/update-card/abc123xyz",
+  "preemptive": true,
+  "message": "Card expires 7/2026. Send the customer the card update link before the next billing attempt.",
+  "timestamp": "2026-06-13T04:00:00.000Z"
+}
+```
+
+**Action:** forward `cardUpdateUrl` to the customer through your own channel. The link stays valid for 14 days. Updating the card before the renewal means the decline never happens — the cheapest recovery there is.
 
 ---
 

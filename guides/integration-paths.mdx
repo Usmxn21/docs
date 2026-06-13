@@ -1,0 +1,114 @@
+---
+title: "Integration Paths"
+description: "Three ways to connect Revtain. Pick the one that matches your stack — most teams are live in under a day."
+---
+
+Revtain recovers failed payments without touching your checkout. What changes is only how Revtain learns about a failure: through your billing platform, through your API calls, or both. This page tells your engineering team exactly what they will build for each path — and what they will never need to build.
+
+<Info>
+  **What you never build, on any path:** retry logic, gateway failover, decline-code handling, card-update pages, or any customer-facing UI. Revtain runs all of it. Your customers see nothing new, and no card data ever flows through your servers to ours — tokens only.
+</Info>
+
+## Choose your path
+
+| Your stack | Path | Engineering effort |
+|---|---|---|
+| Chargebee, Recurly, Stripe Billing, Braintree Subscriptions, Zuora, or Shopify Recharge | [Connector](#path-a-billing-platform-connector) | ~15 minutes — paste one URL |
+| Custom subscription billing (you create the charges) | [Recovery API](#path-b-recovery-api-subscriptions) | Half a day, including webhook handling |
+| Ecommerce / one-time payments | [Recovery API](#path-c-recovery-api-ecommerce-and-one-time) | Half a day, including webhook handling |
+
+Paths combine cleanly. A connector client can still call the API for edge cases, and every path uses the same [webhook events](/guides/webhooks).
+
+---
+
+## Path A — Billing platform connector
+
+If your subscriptions run on a supported billing platform, the platform already knows when a payment fails. The connector listens for that event directly, so your team writes no failure-handling code at all.
+
+**What your engineers do:**
+
+<Steps>
+  <Step title="Paste the Revtain webhook URL into your billing platform">
+    You receive a unique connector URL at onboarding. Add it in your platform's webhook settings (for example, Chargebee → Settings → Webhooks). One URL, one paste.
+  </Step>
+  <Step title="Add the signing credential">
+    Your platform signs its webhooks; Revtain verifies every one and rejects anything unsigned. The exact credential (an HMAC secret or basic-auth pair, depending on platform) is exchanged at onboarding.
+  </Step>
+  <Step title="Stand up a webhook receiver for results (recommended)">
+    Revtain writes successful recoveries back into your billing platform automatically — the invoice gets marked paid where it lives. The [webhook endpoint](/guides/webhooks) is for your own records and any custom logic.
+  </Step>
+</Steps>
+
+**After that, the loop is closed without you:** payment fails → platform notifies Revtain → Revtain recovers → Revtain marks the invoice paid in your platform → your platform resumes the subscription. Your team ships nothing further as Revtain evolves.
+
+<Tip>
+  This is the gold-standard integration. If you are on one of these platforms, do not build against the API first — the connector covers the entire failure lifecycle.
+</Tip>
+
+---
+
+## Path B — Recovery API (subscriptions)
+
+For teams that run their own billing engine: you already have the moment in your code where a renewal charge fails. The integration is one HTTP call at that moment, plus a webhook receiver.
+
+**What your engineers do:**
+
+<Steps>
+  <Step title="On charge failure, call /api/recovery/execute">
+    Pass the gateway token you already hold (for example a Stripe `pm_xxx`), the exact amount, the currency, and the decline code your gateway returned. See the [API integration guide](/guides/api-integration) for working code in Node and Python.
+  </Step>
+  <Step title="Stop your own retry logic for that invoice">
+    Hand off means hand off. Revtain manages attempt timing and card-network retry limits; parallel retries from your side would burn the issuer's tolerance for both of you.
+  </Step>
+  <Step title="Receive the outcome by webhook">
+    `recovery.success` → mark the invoice paid and resume service. `recovery.failed` → branch on the `recommendedAction` field — it tells you whether to wait, request a card update, or review the account. Full event reference: [Webhooks](/guides/webhooks).
+  </Step>
+  <Step title="Store updated card tokens">
+    When a customer updates their card through a Revtain-hosted link, the `card.updated` event delivers the new gateway token. Save it against the customer and discard the old one.
+  </Step>
+</Steps>
+
+**Idempotency:** send an `idempotencyKey` (your invoice ID works well) on every `/execute` call. Duplicate submissions of the same key return `409` instead of risking a second charge — safe to retry your call on network errors.
+
+**Optional, worth the extra hour:**
+
+- Call [`/api/recovery/pulse`](/guides/api-integration) on successful organic charges so your monthly report can compute recovery lift against your true baseline.
+- Handle `card.expiring_soon` — Revtain monitors active cards and warns you **before** a renewal fails, with a ready-made card-update link to forward to the customer. Recovery without a decline ever happening.
+
+---
+
+## Path C — Recovery API (ecommerce and one-time)
+
+One-time payments fail for the same issuer-side reasons subscriptions do — but the customer relationship is thinner, so speed matters more. The mechanics are identical to Path B with two differences in emphasis.
+
+**Difference 1 — the customer may still be present.** A declined first payment or trial conversion often happens while the customer is still on your page. Flag it:
+
+```json
+{
+  "paymentMethodToken": "pm_xxx",
+  "amount": 4900,
+  "currency": "USD",
+  "originalDeclineCode": "do_not_honor",
+  "idempotencyKey": "order_18241",
+  "isTrialConversion": true
+}
+```
+
+`isTrialConversion: true` tells the engine to treat the attempt as time-critical rather than schedule for optimal timing — the response comes back while your customer is still deciding whether to re-enter a card.
+
+**Difference 2 — use the card-update link as your fallback surface.** When the response or the `recovery.failed` webhook carries a card-update URL, surface it to the customer immediately (on the order page, in the confirmation email). For one-time buyers there is no next billing cycle to catch them on; the link is the recovery.
+
+**What your engineers do:** identical to Path B — one `/execute` call at the failure point, one webhook receiver, store updated tokens.
+
+---
+
+## The contract you can build against
+
+Revtain's API surface is frozen in shape: integrate once and you never ship integration code again.
+
+- New request fields are always optional with safe defaults.
+- Existing webhook fields never change meaning. New fields are appended — ignore what you don't use.
+- New webhook events are additive. An unrecognised `event` value is always safe to skip.
+- New capabilities default to backend-only: where a feature could require you to pass new data or let Revtain infer it, Revtain infers it.
+
+Next step: the [integration checklist](/guides/integration-checklist) is the full pre-launch list your team can work through, and [testing](/guides/testing) covers exercising the engine safely before go-live.
