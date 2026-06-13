@@ -90,13 +90,27 @@ One-time payments fail for the same issuer-side reasons subscriptions do — but
   "currency": "USD",
   "originalDeclineCode": "do_not_honor",
   "idempotencyKey": "order_18241",
-  "isTrialConversion": true
+  "customerPresent": true
 }
 ```
 
-`isTrialConversion: true` tells the engine to treat the attempt as time-critical rather than schedule for optimal timing — the response comes back while your customer is still deciding whether to re-enter a card.
+`customerPresent: true` tells the engine a human is waiting: the attempt is treated as time-critical rather than scheduled for optimal timing, and the response comes back while your customer is still deciding.
 
-**Difference 2 — use the card-update link as your fallback surface.** When the response or the `recovery.failed` webhook carries a card-update URL, surface it to the customer immediately (on the order page, in the confirmation email). For one-time buyers there is no next billing cycle to catch them on; the link is the recovery.
+**Difference 2 — the rescue link arrives in the response itself.** When a customer-present attempt fails on something the customer can fix — an expired card, a typo, not enough funds — the response includes a ready-made update surface:
+
+```json
+{
+  "success": false,
+  "message": "Recovery Failed",
+  "cardUpdateUrl": "https://pay.yourdomain.com/update-card/abc123xyz",
+  "customerFixable": true,
+  "recommendedAction": "request_card_update"
+}
+```
+
+Surface `cardUpdateUrl` immediately — a modal on the order page, an inline banner. The link expires in one hour because it is built for the customer standing in front of the failure, not for an email three days later. When the decline is one the customer cannot fix (for example a card the issuer flagged), no link is returned by design — fall back to your normal order-failed flow. For one-time buyers there is no next billing cycle to catch them on; this moment is the recovery.
+
+(`isTrialConversion: true` remains available for SaaS trial-to-paid conversions and has the same urgency effect.)
 
 **What your engineers do:** identical to Path B — one `/execute` call at the failure point, one webhook receiver, store updated tokens.
 
