@@ -1194,7 +1194,6 @@ paths:
                 predictedRecommendation: proceed_with_caution
                 actual: succeeded
                 accurate: true
-                accurate: true
         "400":
           description: Validation error
           content:
