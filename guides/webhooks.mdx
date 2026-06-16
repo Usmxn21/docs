@@ -34,66 +34,76 @@ Every outbound webhook includes an `X-Revtain-Signature` header containing an HM
 
 <CodeGroup>
 
+<Warning>
+  Sign against the **raw request body**, exactly as received — not a re-serialized copy. The signature is computed over the precise bytes Revtain sent. If you let your framework parse the JSON and then re-stringify it (`JSON.stringify(req.body)`), key ordering or whitespace can differ and every signature check will fail. Capture the raw body first, verify, then parse.
+</Warning>
+
 ```javascript Node.js
 const crypto = require('crypto');
 const express = require('express');
 const app = express();
 
-app.post('/webhooks/revtain', express.json(), (req, res) => {
+// Capture the RAW body for this route — do not use express.json() here.
+app.post('/webhooks/revtain', express.raw({ type: 'application/json' }), (req, res) => {
   const signature = req.headers['x-revtain-signature'];
-  const webhookSecret = process.env.REVTAIN_WEBHOOK_SIGNING_SECRET;
+  const webhookSecret = process.env.REVTAIN_WEBHOOK_SECRET;
 
-  // Compute the expected signature
-  const expectedSignature = crypto
+  // req.body is a Buffer (the raw bytes Revtain sent). Hash it directly.
+  const expected = crypto
     .createHmac('sha256', webhookSecret)
-    .update(JSON.stringify(req.body))
+    .update(req.body)
     .digest('hex');
 
-  // Timing-safe comparison
-  if (signature !== expectedSignature) {
+  // Constant-time comparison — never use !== on a signature.
+  const ok =
+    signature &&
+    signature.length === expected.length &&
+    crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected));
+
+  if (!ok) {
     console.error('Invalid webhook signature — rejecting');
     return res.status(401).send('Invalid signature');
   }
 
-  // Signature valid — process the event
-  const { event } = req.body;
-  console.log(`Received verified webhook: ${event}`);
+  // Signature valid — now it is safe to parse.
+  const payload = JSON.parse(req.body.toString('utf8'));
+  console.log(`Received verified webhook: ${payload.event}`);
 
   res.status(200).send('OK');
 });
 ```
 
 ```python Python
-import hmac, hashlib, json, os
+import hmac, hashlib, os, json
 from flask import Flask, request, abort
 
 app = Flask(__name__)
 
 @app.route('/webhooks/revtain', methods=['POST'])
 def handle_webhook():
-    signature = request.headers.get('X-Revtain-Signature')
-    webhook_secret = os.environ['REVTAIN_WEBHOOK_SIGNING_SECRET']
+    signature = request.headers.get('X-Revtain-Signature', '')
+    webhook_secret = os.environ['REVTAIN_WEBHOOK_SECRET']
 
-    expected = hmac.new(
-        webhook_secret.encode(),
-        json.dumps(request.json, separators=(',', ':')).encode(),
-        hashlib.sha256
-    ).hexdigest()
+    # Hash the RAW request body — the exact bytes Revtain sent.
+    raw_body = request.get_data()  # bytes, before any JSON parsing
+    expected = hmac.new(webhook_secret.encode(), raw_body, hashlib.sha256).hexdigest()
 
+    # Constant-time comparison.
     if not hmac.compare_digest(signature, expected):
         abort(401)
 
-    event = request.json.get('event')
-    print(f'Received verified webhook: {event}')
+    payload = json.loads(raw_body)
+    print(f"Received verified webhook: {payload.get('event')}")
 
     return 'OK', 200
 ```
 
 ```bash cURL (Test)
-# Generate a test signature for your endpoint
+# Reproduce a signature locally. The body passed to openssl must be byte-identical
+# to what your server receives, so sign and send the SAME string.
 SECRET="whsec_YOUR_WEBHOOK_SECRET"
 PAYLOAD='{"event":"recovery.success","revtainTransactionId":"test_123","amount":5000}'
-SIGNATURE=$(echo -n "$PAYLOAD" | openssl dgst -sha256 -hmac "$SECRET" | awk '{print $2}')
+SIGNATURE=$(printf '%s' "$PAYLOAD" | openssl dgst -sha256 -hmac "$SECRET" | awk '{print $2}')
 
 curl -X POST https://your-server.com/webhooks/revtain \
   -H "Content-Type: application/json" \
@@ -128,6 +138,10 @@ Sent when a previously failed payment has been successfully recovered.
 **Action:** Mark the customer's invoice as paid in your billing system.
 
 <Note>
+  **Correlating a webhook back to your invoice.** When you call `/api/recovery/execute`, the response includes a `transactionId`. Store it against your invoice. The webhook's `revtainTransactionId` is the **same value** — match on it to know which invoice this outcome belongs to. If you prefer to drive everything from your own key, pass an `idempotencyKey` (your invoice ID) on `/execute` and poll [`GET /api/recovery/status?idempotencyKey=...`](/api-reference) instead of waiting on the webhook.
+</Note>
+
+<Note>
   `recovery.success` and `recovery.failed` may carry an optional `trigger` field identifying what produced the outcome — for example a scheduled retry, or `"reconciliation"` when Revtain's automatic reconciliation resolved a payment whose original gateway response was lost in transit. Handle both events the same way regardless of `trigger`; the field exists for your telemetry.
 </Note>
 
@@ -151,7 +165,7 @@ Sent when all retry strategies have been exhausted.
 }
 ```
 
-**Action:** Branch on `recommendedAction` (see table below). If `dunningEnabled` is `true`, Revtain also starts a [dunning sequence](/guides/dunning) automatically.
+**Action:** Branch on `recommendedAction` (see table below) and run your own customer outreach from your domain — see the [dunning guide](/guides/dunning). Revtain never emails or messages your customers directly.
 
 #### `recommendedAction` values
 
@@ -236,7 +250,7 @@ Sent when the pre-failure risk prediction engine detects a high-risk payment **b
 }
 ```
 
-**Action:** Consider reaching out to the customer to update their payment method before the next billing cycle. Generate a card update link via [`/api/recovery/update-card/generate`](/api-reference/endpoint/generate-card-update-link).
+**Action:** Consider reaching out to the customer to update their payment method before the next billing cycle. Generate a card update link via [`/api/recovery/update-card/generate`](/api-reference).
 
 ---
 
@@ -332,24 +346,23 @@ Sent when Revtain detects that a single customer has hit multiple recovery failu
 
 ### `card.expiring_soon`
 
-Sent by a billing-platform connector ahead of a renewal when the customer's card on file is close to its expiry date. It lets you prompt the customer before the payment fails.
+Sent ahead of a renewal when the customer's card on file is close to its expiry date, so you can prompt the customer before the payment fails. Fired during a pre-renewal cascade for clients on `DIRECT_GATEWAY` mode (Stripe / Checkout.com).
 
 ```json
 {
   "event": "card.expiring_soon",
-  "customerId": "cus_abc123",
+  "clientId": "da646dba-ce56-4483-ad0a-2a4fac54a5e2",
   "paymentMethodToken": "pm_1234567890",
-  "expMonth": 8,
-  "expYear": 2026,
-  "daysUntilExpiry": 21,
-  "timestamp": "2026-05-20T09:00:00.000Z"
+  "expiryMonth": 8,
+  "expiryYear": 2026,
+  "message": "Card expires 8/2026 — consider prompting customer to update."
 }
 ```
 
-**Action:** Reach out to the customer and ask them to update their card before the next renewal. This is a connector event and is sent only when pre-dunning is enabled on your account.
+**Action:** Reach out to the customer and ask them to update their card before the next renewal.
 
 <Note>
-  Connectors for some platforms include extra context — for example, the Stripe Billing connector also sends `upcomingInvoiceAmount` and `currency`. Treat any additional fields as optional.
+  Field names are `expiryMonth` and `expiryYear` (not `expMonth`/`expYear`). Treat any additional fields as optional and forward-compatible.
 </Note>
 
 #### Pre-emptive variant (card health sweep)
@@ -396,7 +409,7 @@ Sent after a failed recovery when the decline pattern suggests the charge would 
 
 ### `churn.flow.{outcome}`
 
-Sent when a customer completes the hosted [cancel flow](/api-reference/endpoint/generate-cancel-flow-link). The event name carries the outcome: `churn.flow.retained`, `churn.flow.paused`, `churn.flow.downgraded`, or `churn.flow.cancelled`.
+Sent when a customer completes the hosted [cancel flow](/api-reference). The event name carries the outcome: `churn.flow.retained`, `churn.flow.paused`, `churn.flow.downgraded`, or `churn.flow.cancelled`.
 
 ```json
 {

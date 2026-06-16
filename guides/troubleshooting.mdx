@@ -109,7 +109,7 @@ description: "Common errors and how to fix them."
 
 **Causes & fixes:**
 - **Endpoint isn't HTTPS** → Revtain only delivers to HTTPS URLs.
-- **Endpoint returned non-200** → After 3 retries (0s, 2s, 8s), Revtain stops trying. Check your logs for failed deliveries.
+- **Endpoint returned non-200** → Revtain retries: three immediate attempts (0s, 2s, 8s), then a durable schedule (1m, 5m, 30m, 2h, 24h). Only after all of those fail is the event written to our audit log for manual resend. Check your logs for the earlier attempts.
 - **Endpoint took longer than 10 seconds** → Treated as failure. Acknowledge the webhook with `200` immediately, then process async.
 - **Wrong URL registered** → Re-check your onboarding settings.
 
@@ -119,7 +119,7 @@ description: "Common errors and how to fix them."
 
 **Cause:** Your account is configured with `dunningEnabled: false`. With dunning disabled, Revtain fires `recovery.success` and `recovery.blocked` webhooks, but does **not** fire `recovery.failed` — the assumption is that you're handling failure detection on your own side.
 
-**Fix:** Either re-enable `dunningEnabled` so failure webhooks fire, or look up the outcome yourself via [`GET /api/recovery/status/:id`](/api-reference/endpoint/get-recovery-status) using the `transactionId` returned from `/api/recovery/execute`. To change the setting, contact your Revtain account manager.
+**Fix:** Either re-enable `dunningEnabled` so failure webhooks fire, or look up the outcome yourself via [`GET /api/recovery/status/:id`](/api-reference) using the `transactionId` returned from `/api/recovery/execute`. To change the setting, contact your Revtain account manager.
 
 ---
 
@@ -127,7 +127,7 @@ description: "Common errors and how to fix them."
 
 **Cause:** You may be reading from a cached version, or the event was retried after a delay.
 
-**Fix:** Always trust the `revtainTransactionId` and look up current state via [`GET /api/recovery/status/:id`](/api-reference/endpoint/get-recovery-status) if uncertain.
+**Fix:** Always trust the `revtainTransactionId` and look up current state via [`GET /api/recovery/status/:id`](/api-reference) if uncertain.
 
 ## Connector Issues
 

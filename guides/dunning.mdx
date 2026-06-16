@@ -17,9 +17,13 @@ Configure the connector webhook URL once during onboarding. Everything else runs
 
 ## Direct-API clients: ship the handler once
 
-Write a single webhook endpoint that reads `cardUpdateUrl` from the `recovery.failed` payload and hands it to your existing email, SMS, or push infrastructure. After that, every future failure routes through your domain automatically. No per-event work.
+Write a single webhook endpoint that listens for `recovery.failed` and branches on the `recommendedAction` field. Because you own the customer relationship, you already hold the customer's email — match the event back to your invoice (via `revtainTransactionId`, or the `idempotencyKey` you supplied to `/execute`) and send the message from your own infrastructure. Wire it once; every future failure runs through it.
 
-The handler is short. Below are two ready-to-paste examples — drop into your backend, change the email-send call to your provider, and you're done.
+<Info>
+  `recovery.failed` does **not** contain the customer's email address or a card-update link — by design. You know your own customer, and for the current direct-gateway model the customer updates their card in **your** billing portal or checkout, not on a Revtain-hosted page. Branch on `recommendedAction` to decide what to do.
+</Info>
+
+The handler is short. Below are two ready-to-paste examples — drop into your backend, change the lookup + send calls to your own, and you're done.
 
 <CodeGroup>
 
@@ -31,24 +35,30 @@ const app = express();
 
 // Required for HMAC signature verification — keep the raw body.
 app.post('/webhooks/revtain', express.raw({ type: 'application/json' }), async (req, res) => {
-  // 1. Verify the webhook came from Revtain.
-  const signature = req.header('X-Revtain-Signature');
+  // 1. Verify the webhook came from Revtain (constant-time).
+  const signature = req.header('X-Revtain-Signature') || '';
   const expected = crypto
     .createHmac('sha256', process.env.REVTAIN_WEBHOOK_SECRET)
     .update(req.body)
     .digest('hex');
-  if (signature !== expected) return res.status(401).end();
+  const ok = signature.length === expected.length &&
+    crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected));
+  if (!ok) return res.status(401).end();
 
   const event = JSON.parse(req.body.toString());
 
-  // 2. Route on event type.
+  // 2. Route on event type + recommended action.
   if (event.event === 'recovery.failed') {
-    await yourEmailProvider.send({
-      from: 'billing@yourdomain.com',
-      to: event.customerEmail,
-      template: 'payment-failed',
-      vars: { updateUrl: event.cardUpdateUrl, amount: event.amount },
-    });
+    const invoice = await yourDb.findInvoiceByRevtainTxn(event.revtainTransactionId);
+    if (event.recommendedAction === 'request_card_update') {
+      await yourEmailProvider.send({
+        from: 'billing@yourdomain.com',
+        to: invoice.customerEmail,                         // you already have this
+        template: 'payment-failed',
+        vars: { updateUrl: yourBillingPortalUrl(invoice), amount: event.amount },
+      });
+    }
+    // 'retry_later' → do nothing, Revtain may retry. 'manual_review' → flag the account.
   }
 
   res.json({ received: true });
@@ -75,14 +85,17 @@ def revtain_webhook():
 
     event = json.loads(raw)
 
-    # 2. Route on event type.
+    # 2. Route on event type + recommended action.
     if event.get('event') == 'recovery.failed':
-        your_email_provider.send(
-            from_addr='billing@yourdomain.com',
-            to=event['customerEmail'],
-            template='payment-failed',
-            vars={'updateUrl': event['cardUpdateUrl'], 'amount': event['amount']},
-        )
+        invoice = your_db.find_invoice_by_revtain_txn(event['revtainTransactionId'])
+        if event.get('recommendedAction') == 'request_card_update':
+            your_email_provider.send(
+                from_addr='billing@yourdomain.com',
+                to=invoice.customer_email,                 # you already have this
+                template='payment-failed',
+                vars={'updateUrl': your_billing_portal_url(invoice), 'amount': event['amount']},
+            )
+        # 'retry_later' -> do nothing. 'manual_review' -> flag the account.
 
     return jsonify(received=True)
 ```
@@ -98,18 +111,22 @@ That is the entire integration. The endpoint runs forever — every future recov
     The payment ran through the available retry paths on the gateway that issued the original token. None succeeded.
   </Step>
   <Step title="Your webhook fires">
-    `recovery.failed` arrives at your endpoint with the full payload — decline code, recommended action, and a ready-to-send `cardUpdateUrl`.
+    `recovery.failed` arrives with the decline code, `recommendedAction`, and `revtainTransactionId`. You match it back to your invoice and customer.
   </Step>
   <Step title="Your existing infrastructure delivers the message">
-    Your handler hands the URL to your email/SMS/push provider. The customer receives a message from your domain, branded as your business.
+    When `recommendedAction` is `request_card_update`, your handler emails the customer from your domain with a link into your billing portal / checkout to re-enter their card.
   </Step>
   <Step title="Customer updates their payment method">
-    They tap the link, land on your branded card-update page, and provide new credentials. You receive a `card.updated` webhook with the new token.
+    They update their card where your other billing already lives. Pass the refreshed gateway token on your next `/execute` call for that customer.
   </Step>
-  <Step title="Recovery completes automatically">
-    Manual retry, the new card on file, or Account Updater closes the loop. Any pending follow-ups cancel automatically.
+  <Step title="Recovery completes">
+    The new card on file, or a later scheduled retry, closes the loop. A success fires `recovery.success` so you can mark the invoice paid.
   </Step>
 </Steps>
+
+<Note>
+  Revtain also offers a fully hosted card-update page, but it requires Revtain's secure vault integration. It is not active in the current direct-gateway launch model — that is why the flow above routes card updates through your own portal. If your account is provisioned with vault integration, the `card.updated` webhook and `POST /api/recovery/update-card/generate` come into play; your onboarding contact will tell you if that applies to you.
+</Note>
 
 ## Operator alerts (for your team)
 
